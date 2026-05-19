@@ -6,7 +6,10 @@
     "dev": "dotenv -e .env.local --override -- next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint app lib proxy.ts",
+    "check": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/check.ps1",
+    "check:full": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/check-full.ps1",
     "generate:icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
