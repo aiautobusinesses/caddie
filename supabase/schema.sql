@@ -7,22 +7,41 @@ create table profiles (
 );
 
 alter table profiles enable row level security;
-create policy "Users can manage their own profile"
-  on profiles for all
+
+create policy "Profiles select own"
+  on profiles for select
+  using (auth.uid() = id);
+
+create policy "Profiles insert own"
+  on profiles for insert
+  with check (auth.uid() = id);
+
+create policy "Profiles update own"
+  on profiles for update
+  using (auth.uid() = id);
+
+create policy "Profiles delete own"
+  on profiles for delete
   using (auth.uid() = id);
 
 -- Auto-create profile on signup
-create function handle_new_user()
-returns trigger as $$
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
 begin
-  insert into profiles (id) values (new.id);
+  insert into public.profiles (id)
+  values (new.id)
+  on conflict (id) do nothing;
   return new;
 end;
-$$ language plpgsql security definer;
+$$;
 
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure handle_new_user();
+  for each row execute function public.handle_new_user();
 
 
 -- Enums

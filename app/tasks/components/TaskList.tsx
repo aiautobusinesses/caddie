@@ -13,6 +13,7 @@ import {
 import type { TaskRow } from "@/lib/tasks"
 import AuditStack from "./AuditStack"
 import TaskEditSheet from "./TaskEditSheet"
+import PushTestPanel from "./PushTestPanel"
 import TaskListRow from "./TaskListRow"
 
 type FilterMode = "when" | "category"
@@ -223,6 +224,8 @@ export default function TaskList({ initialTasks }: TaskListProps) {
           ) : (
             renderCategoryGroups()
           )}
+
+          <PushTestPanel />
         </>
       )}
 

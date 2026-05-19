@@ -1,14 +1,16 @@
--- Scheduled push notifications via Edge Function `notify`
--- Prerequisites:
--- 1. Run the extension block below (or enable pg_cron + pg_net in Dashboard → Database → Extensions)
--- 2. Deploy the Edge Function: supabase functions deploy notify
--- 3. Set Edge Function secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
--- 4. Replace YOUR_PROJECT_REF and YOUR_SERVICE_ROLE_KEY below
+-- Caddie: schedule the notify Edge Function (run once in SQL Editor)
+--
+-- BEFORE RUNNING:
+-- 1. Dashboard → Database → Extensions → enable pg_cron and pg_net
+-- 2. Deploy: supabase functions deploy notify
+-- 3. Edge secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
+-- 4. Find/replace YOUR_PROJECT_REF and YOUR_SERVICE_ROLE_KEY in this file
 
+-- ── Extensions (skip if already enabled via Dashboard) ─────────────
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
 
--- Remove existing Caddie notify jobs if re-running (no error when none exist)
+-- ── Remove old jobs (safe on first run) ──────────────────────────────
 do $$
 declare
   job record;
@@ -20,12 +22,16 @@ begin
       'caddie-notify',
       'caddie-notify-morning',
       'caddie-notify-afternoon',
-      'caddie-notify-evening'
+      'caddie-notify-evening',
+      'caddie-notify-test'
     )
   loop
     perform cron.unschedule(job.jobid);
   end loop;
 end $$;
+
+-- ── Schedules (UTC): 08:00 morning, 13:00 afternoon, 18:00 evening ───
+-- Replace YOUR_PROJECT_REF and YOUR_SERVICE_ROLE_KEY in all three blocks.
 
 select cron.schedule(
   'caddie-notify-morning',
@@ -71,3 +77,6 @@ select cron.schedule(
     );
   $$
 );
+
+-- ── Verify (should return 3 rows) ────────────────────────────────────
+select jobid, jobname, schedule, active from cron.job where jobname like 'caddie-notify-%' and jobname != 'caddie-notify-test';
