@@ -171,3 +171,63 @@ export function calculateNextDue(
       return calculateAnnualNextDue(rule, lastDoneAt)
   }
 }
+
+/** Next annual occurrence on or after a reference date (for new tasks from Life Walk). */
+export function calculateAnnualNextDueOnOrAfter(
+  rule: AnnualRecurrenceRule,
+  onOrAfterDate: string,
+): string {
+  const from = parseDateOnly(onOrAfterDate)
+  const startYear = from.getUTCFullYear()
+
+  for (let offset = 0; offset <= 1; offset += 1) {
+    const candidate = toDateString(
+      new Date(Date.UTC(startYear + offset, rule.month - 1, rule.day)),
+    )
+    if (candidate >= onOrAfterDate) {
+      return candidate
+    }
+  }
+
+  return toDateString(new Date(Date.UTC(startYear + 1, rule.month - 1, rule.day)))
+}
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export function normalizeDateOnly(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null
+  }
+  const trimmed = value.trim()
+  return DATE_ONLY_RE.test(trimmed) ? trimmed : null
+}
+
+export function resolveInitialDueDates(
+  input: {
+    next_due?: string | null
+    due_date?: string | null
+    recurrence_rule?: RecurrenceRule | null
+  },
+  referenceDate: string = new Date().toISOString().split("T")[0],
+): { next_due: string | null; due_date: string | null } {
+  const explicitNext = normalizeDateOnly(input.next_due)
+  const explicitDue = normalizeDateOnly(input.due_date)
+
+  if (explicitNext) {
+    return {
+      next_due: explicitNext,
+      due_date: explicitDue ?? explicitNext,
+    }
+  }
+
+  if (explicitDue) {
+    return { next_due: explicitDue, due_date: explicitDue }
+  }
+
+  if (input.recurrence_rule?.type === "annual") {
+    const next = calculateAnnualNextDueOnOrAfter(input.recurrence_rule, referenceDate)
+    return { next_due: next, due_date: next }
+  }
+
+  return { next_due: null, due_date: null }
+}

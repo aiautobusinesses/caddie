@@ -101,6 +101,9 @@ export default function SwipeableTaskRow({
               {task.estimatedMinutes && (
                 <span className="text-xs text-gray-400">· {task.estimatedMinutes} min</span>
               )}
+              {task.next_due && (
+                <span className="text-xs text-gray-400">· due {task.next_due}</span>
+              )}
               {task.recurrence && (
                 <span className="text-xs text-gray-400">· {task.recurrence}</span>
               )}

@@ -1,3 +1,4 @@
+import { normalizeDateOnly, parseRecurrenceRule } from "@/lib/recurrence"
 import type { LifeWalkExtractedTask, TaskUrgency } from "@/lib/tasks"
 import { isTaskUrgency, normalizeNotifyTimeOfDay } from "@/lib/tasks"
 
@@ -62,16 +63,20 @@ function normalizeTask(raw: unknown): LifeWalkExtractedTask | null {
         ? null
         : null
 
+  const recurrenceRule =
+    item.recurrence_rule && typeof item.recurrence_rule === "object"
+      ? parseRecurrenceRule(item.recurrence_rule)
+      : null
+
   return {
     title,
     category,
     urgency: normalizeUrgency(item.urgency),
     estimatedMinutes,
     recurrence,
-    recurrence_rule:
-      item.recurrence_rule && typeof item.recurrence_rule === "object"
-        ? (item.recurrence_rule as LifeWalkExtractedTask["recurrence_rule"])
-        : null,
+    recurrence_rule: recurrenceRule,
+    next_due: normalizeDateOnly(item.next_due),
+    due_date: normalizeDateOnly(item.due_date),
     notify_days_before:
       typeof item.notify_days_before === "number"
         ? item.notify_days_before

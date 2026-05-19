@@ -1,5 +1,9 @@
 import type { Database } from "@/lib/database.types"
-import type { RecurrenceRule } from "@/lib/recurrence"
+import {
+  parseRecurrenceRule,
+  resolveInitialDueDates,
+  type RecurrenceRule,
+} from "@/lib/recurrence"
 
 export type TaskPriority = Database["public"]["Enums"]["task_priority"]
 export type TaskEnergy = Database["public"]["Enums"]["task_energy"]
@@ -26,6 +30,9 @@ export type LifeWalkExtractedTask = {
   estimatedMinutes: number | null
   recurrence: string | null
   recurrence_rule?: RecurrenceRule | null
+  /** ISO date YYYY-MM-DD when the narrator gives a specific deadline */
+  next_due?: string | null
+  due_date?: string | null
   notify_days_before?: number
   notify_time_of_day?: NotifyTimeOfDay
   notify_escalate?: boolean
@@ -98,6 +105,17 @@ export function resolveEventTypeForDb(eventType: TaskEventInput): TaskEventType 
 export function mapLifeWalkTaskToInsert(
   task: LifeWalkExtractedTask,
 ): Omit<TaskInsert, "user_id"> {
+  const recurrenceRule =
+    task.recurrence_rule != null
+      ? (parseRecurrenceRule(task.recurrence_rule) ?? null)
+      : null
+
+  const { next_due, due_date } = resolveInitialDueDates({
+    next_due: task.next_due,
+    due_date: task.due_date,
+    recurrence_rule: recurrenceRule,
+  })
+
   return {
     title: task.title.trim(),
     category: task.category,
@@ -105,7 +123,9 @@ export function mapLifeWalkTaskToInsert(
     energy: normalizeEnergy(task.energy),
     estimated_minutes: task.estimatedMinutes,
     recurrence_text: task.recurrence,
-    recurrence_rule: task.recurrence_rule ?? null,
+    recurrence_rule: recurrenceRule,
+    due_date,
+    next_due,
     notify_days_before: task.notify_days_before ?? 0,
     notify_time_of_day: normalizeNotifyTimeOfDay(task.notify_time_of_day),
     notify_escalate: task.notify_escalate ?? false,

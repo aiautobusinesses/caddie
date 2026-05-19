@@ -11,6 +11,8 @@ Extract every distinct task from this narration. For each task return:
 - category: one of Home, Garden, Car, Admin, Family, Health, Finance, Other
 - urgency: one of "now" (urgent/time-sensitive), "soon" (next week or two), "someday" (no rush)
 - estimatedMinutes: rough number if you can infer it, otherwise null
+- next_due: ISO date YYYY-MM-DD when the narrator gives a specific deadline (MOT expiry, car tax due, insurance renewal, "due in March", etc.). Required whenever a calendar date or month is mentioned for a deadline. Use the next upcoming occurrence of that date from today.
+- due_date: same as next_due for hard calendar deadlines; otherwise null
 - recurrence: plain English description of when this needs doing again. For plant watering you MUST give two rates separated by a slash: summer rate and winter rate (e.g. "every 3-4 days in summer / every 12-14 days in winter"). Never give a single fixed interval for plant watering. For garden tasks reflect seasonal variation similarly. For home maintenance use intervals like "every 6 months" or "once a year". For one-off tasks use null.
 - recurrence_rule: structured recurrence for scheduling, or null for one-off tasks. Use exactly one of these shapes:
   - { "type": "fixed", "days": number, "anchor": "completion" | "schedule" }
@@ -26,7 +28,10 @@ recurrence_rule rules:
 - notify_time_of_day: one of "morning", "afternoon", "evening". When it makes most sense to act. Bin collection = "evening", garden tasks = "morning", admin = "morning".
 - notify_escalate: boolean. True for hard deadline tasks where a second closer-in notification makes sense (MOT, annual tasks, fixed-date deadlines). Recurring maintenance = false.
 
-Return ONLY a valid JSON array. No markdown, no code fences, no commentary before or after.`
+Return ONLY a valid JSON array. No markdown, no code fences, no commentary before or after.
+
+Example with a dated deadline:
+[{"title":"Book MOT","category":"Car","urgency":"soon","estimatedMinutes":15,"next_due":"2026-03-15","due_date":"2026-03-15","recurrence":"once a year","recurrence_rule":{"type":"annual","month":3,"day":15,"anchor":"schedule"},"notify_days_before":14,"notify_time_of_day":"morning","notify_escalate":true}]`
 
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY?.trim()) {
