@@ -6,7 +6,14 @@ const LIFEWALK_MODEL = "claude-haiku-4-5"
 
 const EXTRACTION_PROMPT = `You are helping someone manage their life admin. They have just narrated a walk around their home and life, describing things they notice that need doing.
 
-Extract every distinct task from this narration. For each task return:
+Extract every distinct task from this narration.
+
+Critical — avoid duplicates:
+- ONE task per deadline per subject (e.g. one car, one tax date). Never output both "MOT for Touran" and "Book MOT for Touran" for the same date — only the actionable task (e.g. "Book MOT for Touran") with next_due set.
+- Same for tax, insurance, etc.: "Renew car tax for Touran", not a separate passive "Tax renewal due" row.
+- Different work types on the same date stay separate (e.g. "Service MX-5" and "Renew tax for MX-5" on the same day are two tasks).
+
+For each task return:
 - title: a clear, plain-English description of what needs doing (not too formal, keep their voice)
 - category: one of Home, Garden, Car, Admin, Family, Health, Finance, Other
 - urgency: one of "now" (urgent/time-sensitive), "soon" (next week or two), "someday" (no rush)
