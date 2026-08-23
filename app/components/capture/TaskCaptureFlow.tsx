@@ -152,9 +152,6 @@ export default function TaskCaptureFlow({
               key={`${thing.name}-${i}`}
               thing={thing}
               onDelete={() => deleteThing(i)}
-              onUpdate={(updates) =>
-                setThings((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...updates } : t)))
-              }
             />
           ))}
         </div>

@@ -71,6 +71,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       .limit(1)
       .single()
 
+    const thingComplete = !nextStep
+
     await supabase
       .from("things")
       .update({
@@ -86,6 +88,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
       user_id: user.id,
       event_type: "done",
       metadata: { source: "thing_done" },
+    })
+
+    return NextResponse.json({
+      ok: true,
+      still_going: false,
+      thing_complete: thingComplete,
+      thing_name: thingComplete ? thing.name : null,
     })
   } else {
     // No steps — just clear started_at

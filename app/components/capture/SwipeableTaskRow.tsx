@@ -8,11 +8,9 @@ const SWIPE_THRESHOLD = 72
 export default function SwipeableThingRow({
   thing,
   onDelete,
-  onUpdate,
 }: {
   thing: LifeWalkExtractedThing
   onDelete: () => void
-  onUpdate: (updates: Partial<LifeWalkExtractedThing>) => void
 }) {
   const [dx, setDx] = useState(0)
   const [gone, setGone] = useState(false)
