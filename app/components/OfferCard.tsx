@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import type { OfferItem, InProgressThing } from "@/app/api/offer/route"
+import type { OfferItem, InProgressThing, CareGroupOffer } from "@/app/api/offer/route"
 import Spinner from "./Spinner"
 import { useCapture } from "./capture/CaptureContext"
 import { TASKS_UPDATED_EVENT } from "@/lib/capture"
+import CareGroupCard from "./CareGroupCard"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,17 +17,19 @@ type Screen = "offer" | "focus" | "settings"
 type Props = {
   initialOffer: OfferItem[]
   initialInProgress: InProgressThing | null
+  initialCareGroup: CareGroupOffer | null
 }
 
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function OfferCard({ initialOffer, initialInProgress }: Props) {
+export default function OfferCard({ initialOffer, initialInProgress, initialCareGroup }: Props) {
   const router = useRouter()
   const { openCapture } = useCapture()
   const [screen, setScreen] = useState<Screen>(initialInProgress ? "focus" : "offer")
   const [offer, setOffer] = useState<OfferItem[]>(initialOffer)
+  const [careGroup, setCareGroup] = useState<CareGroupOffer | null>(initialCareGroup)
   const [inProgress, setInProgress] = useState<InProgressThing | null>(initialInProgress)
   const [breakdown, setBreakdown] = useState<string[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -58,10 +61,12 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
       if (data.in_progress) {
         setInProgress(data.in_progress)
         setBreakdown(null)
+        setCareGroup(null)
         setScreen("focus")
       } else {
         setInProgress(null)
         setOffer(data.offer ?? [])
+        setCareGroup((data.care_group as CareGroupOffer | null) ?? null)
         setScreen("offer")
       }
     } catch (e) {
@@ -264,7 +269,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
               </h2>
             </div>
 
-            {offer.length === 0 ? (
+            {offer.length === 0 && !careGroup ? (
               /* Empty state */
               <div className="flex-1 px-6 flex flex-col justify-center">
                 <h3 className="text-[28px] font-bold leading-[1.06] tracking-[-0.02em] text-[#e8eaf0]">
@@ -293,6 +298,12 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
                 <div className="flex flex-col gap-[14px] px-6 py-4">
                   {actionError && (
                     <p className="text-sm text-red-400">{actionError}</p>
+                  )}
+                  {careGroup && (
+                    <CareGroupCard
+                      group={careGroup}
+                      onDone={() => void refreshOffer()}
+                    />
                   )}
                   {offer.map((item) => (
                     <div

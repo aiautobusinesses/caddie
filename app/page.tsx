@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import OfferCard from "./components/OfferCard"
-import type { OfferItem, InProgressThing } from "@/app/api/offer/route"
+import type { OfferItem, InProgressThing, CareGroupOffer } from "@/app/api/offer/route"
 import { parseRecurrenceRule } from "@/lib/recurrence"
+import { buildCareGroup } from "@/lib/care-grouping"
+import type { CarePlanRow } from "@/lib/care-grouping"
 
 export default async function Home() {
   const supabase = await createClient()
@@ -11,7 +13,7 @@ export default async function Home() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_done")
+    .select("onboarding_done, last_care_offer_date")
     .eq("id", user.id)
     .single()
 
@@ -76,10 +78,46 @@ export default async function Home() {
     : null
 
   if (initialInProgress) {
-    return <OfferCard initialOffer={[]} initialInProgress={initialInProgress} />
+    return <OfferCard initialOffer={[]} initialInProgress={initialInProgress} initialCareGroup={null} />
   }
 
-  // Build offer
+  // ── Care group ─────────────────────────────────────────────────────────────
+  const lastCareOfferDate = profile?.last_care_offer_date ?? null
+  const careAlreadyOfferedToday = lastCareOfferDate === today
+
+  let initialCareGroup: CareGroupOffer | null = null
+  if (!careAlreadyOfferedToday) {
+    const { data: carePlanData } = await supabase
+      .from("care_plans")
+      .select(`
+        id, entity_id, action, intervals, tolerance_days, overdue_days,
+        last_done_at, next_due_at, archived_at,
+        entities!care_plans_entity_id_fkey (
+          id, name, location, archived_at
+        )
+      `)
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+
+    if (carePlanData && carePlanData.length > 0) {
+      const group = buildCareGroup(carePlanData as unknown as CarePlanRow[], today)
+      if (group) {
+        initialCareGroup = {
+          type: "care_group",
+          anchor_plan_id: group.anchor_plan_id,
+          action: group.action,
+          location: group.location,
+          title: group.title,
+          entity_names: group.entity_names,
+          plan_ids: group.plan_ids,
+          reason: group.reason,
+          has_overdue: group.has_overdue,
+        }
+      }
+    }
+  }
+
+  // ── Build offer ────────────────────────────────────────────────────────────
   const available = rows.filter((t) => t.live_step_id != null || t.steps.length === 0)
 
   const obligations = available.filter((t) => {
@@ -90,6 +128,10 @@ export default async function Home() {
   })
 
   const projects = available.filter((t) => t.class === "project")
+
+  const hasObligation = obligations.length > 0
+  const useCareSlot = !hasObligation && initialCareGroup != null
+  const reservedSlots = hasObligation || useCareSlot ? 1 : 0
 
   function pickWithSpread(items: RawThing[]): RawThing[] {
     if (items.length <= 3) return items
@@ -108,7 +150,7 @@ export default async function Home() {
     return picked.slice(0, 3)
   }
 
-  const selected = [...obligations.slice(0, 1), ...pickWithSpread(projects).slice(0, 3 - Math.min(obligations.length, 1))]
+  const selected = [...obligations.slice(0, 1), ...pickWithSpread(projects).slice(0, 3 - reservedSlots)]
 
   const initialOffer: OfferItem[] = selected.map((t) => {
     const live = t.steps.find((s) => s.id === t.live_step_id)
@@ -122,5 +164,11 @@ export default async function Home() {
     }
   })
 
-  return <OfferCard initialOffer={initialOffer} initialInProgress={null} />
+  return (
+    <OfferCard
+      initialOffer={initialOffer}
+      initialInProgress={null}
+      initialCareGroup={useCareSlot ? initialCareGroup : null}
+    />
+  )
 }

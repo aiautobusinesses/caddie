@@ -18,18 +18,21 @@ export type Database = {
           id: string
           timezone: string
           onboarding_done: boolean
+          last_care_offer_date: string | null
           created_at: string
         }
         Insert: {
           id: string
           timezone?: string
           onboarding_done?: boolean
+          last_care_offer_date?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           timezone?: string
           onboarding_done?: boolean
+          last_care_offer_date?: string | null
           created_at?: string
         }
         Relationships: []
@@ -187,6 +190,105 @@ export type Database = {
         }
         Relationships: []
       }
+      entities: {
+        Row: {
+          id: string
+          user_id: string
+          created_at: string
+          name: string
+          kind: string
+          location: string | null
+          archived_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          created_at?: string
+          name: string
+          kind: string
+          location?: string | null
+          archived_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          created_at?: string
+          name?: string
+          kind?: string
+          location?: string | null
+          archived_at?: string | null
+        }
+        Relationships: []
+      }
+      care_plans: {
+        Row: {
+          id: string
+          entity_id: string
+          user_id: string
+          created_at: string
+          action: string
+          intervals: Json
+          tolerance_days: number
+          overdue_days: number
+          last_done_at: string | null
+          next_due_at: string | null
+          source: Database["public"]["Enums"]["care_plan_source"]
+          archived_at: string | null
+        }
+        Insert: {
+          id?: string
+          entity_id: string
+          user_id: string
+          created_at?: string
+          action: string
+          intervals: Json
+          tolerance_days?: number
+          overdue_days?: number
+          last_done_at?: string | null
+          next_due_at?: string | null
+          source?: Database["public"]["Enums"]["care_plan_source"]
+          archived_at?: string | null
+        }
+        Update: {
+          id?: string
+          entity_id?: string
+          user_id?: string
+          created_at?: string
+          action?: string
+          intervals?: Json
+          tolerance_days?: number
+          overdue_days?: number
+          last_done_at?: string | null
+          next_due_at?: string | null
+          source?: Database["public"]["Enums"]["care_plan_source"]
+          archived_at?: string | null
+        }
+        Relationships: []
+      }
+      care_events: {
+        Row: {
+          id: string
+          care_plan_id: string
+          user_id: string
+          created_at: string
+          type: Database["public"]["Enums"]["care_event_type"]
+        }
+        Insert: {
+          id?: string
+          care_plan_id: string
+          user_id: string
+          created_at?: string
+          type: Database["public"]["Enums"]["care_event_type"]
+        }
+        Update: {
+          id?: string
+          care_plan_id?: string
+          user_id?: string
+          created_at?: string
+          type?: Database["public"]["Enums"]["care_event_type"]
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -198,6 +300,8 @@ export type Database = {
       step_band: "short" | "sitting" | "run"
       step_mode: "thinking" | "doing"
       step_shape: "clean" | "bleeds"
+      care_plan_source: "generated" | "user"
+      care_event_type: "offered" | "done" | "not_done" | "plan_edited"
     }
     CompositeTypes: Record<string, never>
   }

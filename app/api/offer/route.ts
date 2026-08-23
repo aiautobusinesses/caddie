@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { getAuthenticatedContext } from "@/lib/api/session"
 import { parseRecurrenceRule } from "@/lib/recurrence"
+import { buildCareGroup } from "@/lib/care-grouping"
+import type { CarePlanRow } from "@/lib/care-grouping"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,6 +15,19 @@ export type OfferItem = {
   step_name: string
   band: "short" | "sitting" | "run"
   reason: string | null
+}
+
+/** A grouped recurring care offer. band/mode/shape are always short/doing/clean per spec. */
+export type CareGroupOffer = {
+  type: "care_group"
+  anchor_plan_id: string
+  action: string
+  location: string | null
+  title: string
+  entity_names: string[]
+  plan_ids: string[]
+  reason: string | null
+  has_overdue: boolean
 }
 
 export type InProgressThing = {
@@ -128,6 +143,7 @@ export async function GET() {
   const { supabase, user } = auth
   const today = new Date().toISOString().split("T")[0]
 
+  // ── Fetch things + steps ──────────────────────────────────────────────────
   const { data, error } = await supabase
     .from("things")
     .select(`
@@ -143,7 +159,7 @@ export async function GET() {
 
   const things = (data ?? []) as unknown as ThingRow[]
 
-  // Check for in-progress thing
+  // ── Check for in-progress thing ───────────────────────────────────────────
   const inProgress = things.find((t) => t.started_at != null)
   if (inProgress) {
     const liveStep = inProgress.steps.find((s) => s.id === inProgress.live_step_id)
@@ -155,10 +171,55 @@ export async function GET() {
         started_at: inProgress.started_at as string,
       } satisfies InProgressThing,
       offer: [],
+      care_group: null,
     })
   }
 
-  // Build offer from things that still have work to do
+  // ── Fetch care plans for grouping ─────────────────────────────────────────
+  const { data: carePlanData } = await supabase
+    .from("care_plans")
+    .select(`
+      id, entity_id, action, intervals, tolerance_days, overdue_days,
+      last_done_at, next_due_at, archived_at,
+      entities!care_plans_entity_id_fkey (
+        id, name, location, archived_at
+      )
+    `)
+    .eq("user_id", user.id)
+    .is("archived_at", null)
+
+  // ── Check once-daily cap ─────────────────────────────────────────────────
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("last_care_offer_date")
+    .eq("id", user.id)
+    .single()
+
+  const lastCareOfferDate = (profileData as { last_care_offer_date: string | null } | null)
+    ?.last_care_offer_date ?? null
+  const careAlreadyOfferedToday = lastCareOfferDate === today
+
+  // ── Build care group ──────────────────────────────────────────────────────
+  let careGroup: CareGroupOffer | null = null
+  if (!careAlreadyOfferedToday && carePlanData && carePlanData.length > 0) {
+    const plans = carePlanData as unknown as CarePlanRow[]
+    const group = buildCareGroup(plans, today)
+    if (group) {
+      careGroup = {
+        type: "care_group",
+        anchor_plan_id: group.anchor_plan_id,
+        action: group.action,
+        location: group.location,
+        title: group.title,
+        entity_names: group.entity_names,
+        plan_ids: group.plan_ids,
+        reason: group.reason,
+        has_overdue: group.has_overdue,
+      }
+    }
+  }
+
+  // ── Build obligation + project offer ─────────────────────────────────────
   const available = things.filter((t) => t.live_step_id != null || t.steps.length === 0)
 
   const obligations = available.filter((t) => {
@@ -170,8 +231,17 @@ export async function GET() {
 
   const projects = available.filter((t) => t.class === "project")
 
+  // Obligation wins the slot; care takes it only if no obligation
+  const hasObligation = obligations.length > 0
   const obligationSlot = obligations.slice(0, 1)
-  const projectSlots = pickWithSpread(projects).slice(0, 3 - obligationSlot.length)
+
+  // If obligation wins, care group is suppressed for that slot
+  // Care group takes the slot when no obligations, and hasn't been shown today
+  const useCareSlot = !hasObligation && careGroup != null
+
+  // Project slots fill remaining space (max 3 total, 1 reserved for obligation/care)
+  const reservedSlots = hasObligation || useCareSlot ? 1 : 0
+  const projectSlots = pickWithSpread(projects).slice(0, 3 - reservedSlots)
   const selected = [...obligationSlot, ...projectSlots]
 
   const offer: OfferItem[] = selected.map((thing) => {
@@ -186,5 +256,9 @@ export async function GET() {
     }
   })
 
-  return NextResponse.json({ in_progress: null, offer })
+  return NextResponse.json({
+    in_progress: null,
+    offer,
+    care_group: useCareSlot ? careGroup : null,
+  })
 }
