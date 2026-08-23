@@ -1,135 +1,53 @@
 import type { Database } from "@/lib/database.types"
-import {
-  parseRecurrenceRule,
-  resolveInitialDueDates,
-  type RecurrenceRule,
-} from "@/lib/recurrence"
+import type { RecurrenceRule } from "@/lib/recurrence"
 
-export type TaskPriority = Database["public"]["Enums"]["task_priority"]
-export type TaskEnergy = Database["public"]["Enums"]["task_energy"]
+export type ThingClass = Database["public"]["Enums"]["thing_class"]
 export type TaskSource = Database["public"]["Enums"]["task_source"]
-export type TaskStatus = Database["public"]["Enums"]["task_status"]
-export type TaskEventType = Database["public"]["Enums"]["event_type"]
+export type EventType = Database["public"]["Enums"]["event_type"]
+export type NotifyTimeOfDay = Database["public"]["Enums"]["notify_time_of_day"]
 
-/** API input; `why` is stored as `edited` with metadata.kind = "why". */
-export type TaskEventInput = TaskEventType | "why"
+export type ThingRow = Database["public"]["Tables"]["things"]["Row"]
+export type ThingInsert = Database["public"]["Tables"]["things"]["Insert"]
+export type StepRow = Database["public"]["Tables"]["steps"]["Row"]
+export type StepInsert = Database["public"]["Tables"]["steps"]["Insert"]
+export type StepEventRow = Database["public"]["Tables"]["step_events"]["Row"]
 
-export type TaskRow = Database["public"]["Tables"]["tasks"]["Row"]
-export type TaskInsert = Database["public"]["Tables"]["tasks"]["Insert"]
+/** Event inputs accepted by the API; `why` is stored as `edited` with metadata. */
+export type StepEventInput = EventType | "why"
+
+const STEP_EVENT_INPUTS: readonly StepEventInput[] = ["done", "edited", "notified", "why"]
+
+export function isStepEventInput(value: string): value is StepEventInput {
+  return (STEP_EVENT_INPUTS as readonly string[]).includes(value)
+}
+
+export function resolveEventTypeForDb(eventType: StepEventInput): EventType {
+  if (eventType === "why") return "edited"
+  return eventType
+}
 
 /** Urgency labels used in Life Walk UI and Claude extraction. */
 export type TaskUrgency = "now" | "soon" | "someday"
-
-export type NotifyTimeOfDay = Database["public"]["Enums"]["notify_time_of_day"]
-
-export type LifeWalkExtractedTask = {
-  title: string
-  category: string
-  urgency: TaskUrgency
-  energy?: TaskEnergy
-  estimatedMinutes: number | null
-  recurrence: string | null
-  recurrence_rule?: RecurrenceRule | null
-  /** ISO date YYYY-MM-DD when the narrator gives a specific deadline */
-  next_due?: string | null
-  due_date?: string | null
-  notify_days_before?: number
-  notify_time_of_day?: NotifyTimeOfDay
-  notify_escalate?: boolean
-}
-
-const NOTIFY_TIMES: readonly NotifyTimeOfDay[] = ["morning", "afternoon", "evening"]
-
-export function normalizeNotifyTimeOfDay(
-  value: NotifyTimeOfDay | undefined | null,
-): NotifyTimeOfDay {
-  if (value && NOTIFY_TIMES.includes(value)) {
-    return value
-  }
-  return "morning"
-}
-
-const URGENCY_TO_PRIORITY: Record<TaskUrgency, TaskPriority> = {
-  now: "high",
-  soon: "medium",
-  someday: "low",
-}
-
-const PRIORITY_TO_URGENCY: Record<TaskPriority, TaskUrgency> = {
-  high: "now",
-  medium: "soon",
-  low: "someday",
-}
-
-const TASK_ENERGIES: readonly TaskEnergy[] = ["low", "medium", "high"]
-
-export function urgencyToPriority(urgency: TaskUrgency): TaskPriority {
-  return URGENCY_TO_PRIORITY[urgency]
-}
-
-export function priorityToUrgency(priority: TaskPriority): TaskUrgency {
-  return PRIORITY_TO_URGENCY[priority]
-}
-
-export function normalizeEnergy(energy: TaskEnergy | undefined | null): TaskEnergy {
-  if (energy && TASK_ENERGIES.includes(energy)) {
-    return energy
-  }
-  return "medium"
-}
 
 export function isTaskUrgency(value: string): value is TaskUrgency {
   return value === "now" || value === "soon" || value === "someday"
 }
 
-const TASK_EVENT_INPUTS: readonly TaskEventInput[] = [
-  "done",
-  "skipped",
-  "snoozed",
-  "edited",
-  "why",
-]
-
-export function isTaskEventInput(value: string): value is TaskEventInput {
-  return (TASK_EVENT_INPUTS as readonly string[]).includes(value)
+/** Shape Claude returns for a single extracted step. */
+export type LifeWalkExtractedStep = {
+  name: string
+  estimated_minutes: number | null
+  ends_cleanly: boolean
+  recurrence_rule: RecurrenceRule | null
+  next_due: string | null
 }
 
-export function resolveEventTypeForDb(eventType: TaskEventInput): TaskEventType {
-  if (eventType === "why") {
-    return "edited"
-  }
-  return eventType
-}
-
-/** Maps a Life Walk review task to a `tasks` insert row (without `user_id`). */
-export function mapLifeWalkTaskToInsert(
-  task: LifeWalkExtractedTask,
-): Omit<TaskInsert, "user_id"> {
-  const recurrenceRule =
-    task.recurrence_rule != null
-      ? (parseRecurrenceRule(task.recurrence_rule) ?? null)
-      : null
-
-  const { next_due, due_date } = resolveInitialDueDates({
-    next_due: task.next_due,
-    due_date: task.due_date,
-    recurrence_rule: recurrenceRule,
-  })
-
-  return {
-    title: task.title.trim(),
-    category: task.category,
-    priority: urgencyToPriority(task.urgency),
-    energy: normalizeEnergy(task.energy),
-    estimated_minutes: task.estimatedMinutes,
-    recurrence_text: task.recurrence,
-    recurrence_rule: recurrenceRule,
-    due_date,
-    next_due,
-    notify_days_before: task.notify_days_before ?? 0,
-    notify_time_of_day: normalizeNotifyTimeOfDay(task.notify_time_of_day),
-    notify_escalate: task.notify_escalate ?? false,
-    source: "life_walk",
-    status: "active",
-  }
+/** Shape Claude returns for a single extracted thing (with its steps). */
+export type LifeWalkExtractedThing = {
+  name: string
+  class: ThingClass
+  notify_window: number | null
+  notify_time_of_day?: NotifyTimeOfDay | null
+  notify_escalate?: boolean
+  steps: LifeWalkExtractedStep[]
 }

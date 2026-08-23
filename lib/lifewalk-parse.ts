@@ -1,6 +1,10 @@
-import { normalizeDateOnly, parseRecurrenceRule } from "@/lib/recurrence"
-import type { LifeWalkExtractedTask, TaskUrgency } from "@/lib/tasks"
-import { isTaskUrgency, normalizeNotifyTimeOfDay } from "@/lib/tasks"
+import { parseRecurrenceRule, normalizeDateOnly } from "@/lib/recurrence"
+import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass } from "@/lib/tasks"
+import { isTaskUrgency } from "@/lib/tasks"
+
+// ---------------------------------------------------------------------------
+// JSON extraction
+// ---------------------------------------------------------------------------
 
 function extractJsonPayload(text: string): unknown {
   let cleaned = text.trim()
@@ -19,173 +23,107 @@ function extractJsonPayload(text: string): unknown {
     const objEnd = cleaned.lastIndexOf("}")
     if (objStart !== -1 && objEnd > objStart) {
       const obj = JSON.parse(cleaned.slice(objStart, objEnd + 1)) as Record<string, unknown>
-      if (Array.isArray(obj.tasks)) {
-        return obj.tasks
-      }
+      if (Array.isArray(obj.things)) return obj.things
     }
 
     throw new Error("No JSON array found in model response")
   }
 }
 
-function normalizeUrgency(value: unknown): TaskUrgency {
-  if (typeof value === "string" && isTaskUrgency(value)) {
-    return value
-  }
-  return "soon"
-}
+// ---------------------------------------------------------------------------
+// Step normalisation
+// ---------------------------------------------------------------------------
 
-function normalizeTask(raw: unknown): LifeWalkExtractedTask | null {
-  if (!raw || typeof raw !== "object") {
-    return null
-  }
-
+function normalizeStep(raw: unknown): LifeWalkExtractedStep | null {
+  if (!raw || typeof raw !== "object") return null
   const item = raw as Record<string, unknown>
-  const title = typeof item.title === "string" ? item.title.trim() : ""
-  if (!title) {
-    return null
+
+  const name = typeof item.name === "string" ? item.name.trim() : ""
+  if (!name) return null
+
+  let estimated_minutes: number | null = null
+  if (typeof item.estimated_minutes === "number" && Number.isFinite(item.estimated_minutes)) {
+    estimated_minutes = item.estimated_minutes
   }
 
-  const category =
-    typeof item.category === "string" && item.category.trim()
-      ? item.category.trim()
-      : "Other"
+  const ends_cleanly = item.ends_cleanly !== false
 
-  let estimatedMinutes: number | null = null
-  if (typeof item.estimatedMinutes === "number" && Number.isFinite(item.estimatedMinutes)) {
-    estimatedMinutes = item.estimatedMinutes
-  }
-
-  const recurrence =
-    typeof item.recurrence === "string"
-      ? item.recurrence
-      : item.recurrence === null
-        ? null
-        : null
-
-  const recurrenceRule =
+  const recurrence_rule =
     item.recurrence_rule && typeof item.recurrence_rule === "object"
       ? parseRecurrenceRule(item.recurrence_rule)
       : null
 
-  return {
-    title,
-    category,
-    urgency: normalizeUrgency(item.urgency),
-    estimatedMinutes,
-    recurrence,
-    recurrence_rule: recurrenceRule,
-    next_due: normalizeDateOnly(item.next_due),
-    due_date: normalizeDateOnly(item.due_date),
-    notify_days_before:
-      typeof item.notify_days_before === "number"
-        ? item.notify_days_before
-        : 0,
-    notify_time_of_day: normalizeNotifyTimeOfDay(
-      typeof item.notify_time_of_day === "string"
-        ? (item.notify_time_of_day as LifeWalkExtractedTask["notify_time_of_day"])
-        : undefined,
-    ),
-    notify_escalate: Boolean(item.notify_escalate),
-  }
+  const next_due = normalizeDateOnly(item.next_due)
+
+  return { name, estimated_minutes, ends_cleanly, recurrence_rule, next_due }
 }
 
-type DeadlineKind = "mot" | "tax" | "service" | "insurance" | "other"
+// ---------------------------------------------------------------------------
+// Thing normalisation
+// ---------------------------------------------------------------------------
 
-const ACTION_VERB_RE =
-  /^(book|renew|arrange|schedule|sort|pay|register|apply|submit)\b/i
+const NOTIFY_TIMES: readonly NotifyTimeOfDay[] = ["morning", "afternoon", "evening"]
 
-function classifyDeadlineKind(title: string): DeadlineKind {
-  const lower = title.toLowerCase()
-  if (/\bmot\b/.test(lower)) return "mot"
-  if (/\btax\b|road fund|\bved\b/.test(lower)) return "tax"
-  if (/\bservice\b/.test(lower)) return "service"
-  if (/\binsurance\b/.test(lower)) return "insurance"
-  return "other"
+function normalizeNotifyTimeOfDay(value: unknown): NotifyTimeOfDay | null {
+  if (typeof value === "string" && (NOTIFY_TIMES as string[]).includes(value)) {
+    return value as NotifyTimeOfDay
+  }
+  return null
 }
 
-function normalizeDedupeSubject(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(ACTION_VERB_RE, "")
-    .replace(/\b(renewal|due|expires?)\b/g, "")
-    .replace(/\bmx[\s-]*5\b/g, "mx5")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
+function normalizeThingClass(value: unknown): ThingClass {
+  if (value === "obligation" || value === "project") return value
+  return "project"
 }
 
-function dedupeSignature(task: LifeWalkExtractedTask): string | null {
-  if (!task.next_due) {
-    return null
-  }
+function normalizeThing(raw: unknown): LifeWalkExtractedThing | null {
+  if (!raw || typeof raw !== "object") return null
+  const item = raw as Record<string, unknown>
 
-  const kind = classifyDeadlineKind(task.title)
-  const subject = normalizeDedupeSubject(task.title)
-  return `${task.category.toLowerCase()}|${task.next_due}|${kind}|${subject}`
-}
+  const name = typeof item.name === "string" ? item.name.trim() : ""
+  if (!name) return null
 
-/** Prefer actionable titles (book/renew) over passive deadline labels. */
-function taskActionScore(title: string): number {
-  const lower = title.toLowerCase()
-  if (ACTION_VERB_RE.test(lower)) {
-    return 3
-  }
-  if (/\b(renewal)\b/.test(lower) && !/^renew\b/.test(lower)) {
-    return 1
-  }
-  if (/\bmot\b/.test(lower) && !/\bbook\b/.test(lower)) {
-    return 1
-  }
-  return 2
-}
-
-export function dedupeLifeWalkTasks(
-  tasks: LifeWalkExtractedTask[],
-): LifeWalkExtractedTask[] {
-  const undated = tasks.filter((task) => !task.next_due)
-  const dated = tasks.filter((task) => task.next_due)
-
-  const groups = new Map<string, LifeWalkExtractedTask[]>()
-  for (const task of dated) {
-    const signature = dedupeSignature(task)
-    if (!signature) {
-      continue
+  const steps: LifeWalkExtractedStep[] = []
+  if (Array.isArray(item.steps)) {
+    for (const s of item.steps) {
+      const step = normalizeStep(s)
+      if (step) steps.push(step)
     }
-    const group = groups.get(signature) ?? []
-    group.push(task)
-    groups.set(signature, group)
   }
 
-  const merged: LifeWalkExtractedTask[] = [...undated]
-  for (const group of groups.values()) {
-    const best = group.reduce((picked, candidate) =>
-      taskActionScore(candidate.title) > taskActionScore(picked.title)
-        ? candidate
-        : picked,
-    )
-    merged.push(best)
-  }
+  if (steps.length === 0) return null
 
-  return merged
+  return {
+    name,
+    class: normalizeThingClass(item.class),
+    notify_window:
+      typeof item.notify_window === "number" ? item.notify_window : null,
+    notify_time_of_day: normalizeNotifyTimeOfDay(item.notify_time_of_day),
+    notify_escalate: Boolean(item.notify_escalate),
+    steps,
+  }
 }
 
-export function parseLifeWalkTasksFromModelText(text: string): LifeWalkExtractedTask[] {
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+export function parseLifeWalkThingsFromModelText(text: string): LifeWalkExtractedThing[] {
   const payload = extractJsonPayload(text)
   const list = Array.isArray(payload) ? payload : []
 
-  const tasks: LifeWalkExtractedTask[] = []
+  const things: LifeWalkExtractedThing[] = []
   for (const item of list) {
-    const task = normalizeTask(item)
-    if (task) {
-      tasks.push(task)
-    }
+    const thing = normalizeThing(item)
+    if (thing) things.push(thing)
   }
 
-  const deduped = dedupeLifeWalkTasks(tasks)
-
-  if (deduped.length === 0) {
-    throw new Error("No valid tasks in model response")
+  if (things.length === 0) {
+    throw new Error("No valid things in model response")
   }
 
-  return deduped
+  return things
 }
+
+// Keep old export name as alias so the lifewalk route still compiles until rewritten
+export { isTaskUrgency }

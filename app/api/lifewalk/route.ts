@@ -1,44 +1,48 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { NextRequest, NextResponse } from "next/server"
-import { parseLifeWalkTasksFromModelText } from "@/lib/lifewalk-parse"
+import { parseLifeWalkThingsFromModelText } from "@/lib/lifewalk-parse"
 
 const LIFEWALK_MODEL = "claude-haiku-4-5"
 
-const EXTRACTION_PROMPT = `You are helping someone manage their life admin. They have just narrated a walk around their home and life, describing things they notice that need doing.
+const EXTRACTION_PROMPT = `You are helping someone manage their life admin. They have narrated a walk around their home and life, describing things they notice that need doing.
 
-Extract every distinct task from this narration.
+Extract every distinct THING from this narration and break each one into ordered STEPS — the actual actions, in the order they need to happen.
 
-Critical — avoid duplicates:
-- ONE task per deadline per subject (e.g. one car, one tax date). Never output both "MOT for Touran" and "Book MOT for Touran" for the same date — only the actionable task (e.g. "Book MOT for Touran") with next_due set.
-- Same for tax, insurance, etc.: "Renew car tax for Touran", not a separate passive "Tax renewal due" row.
-- Different work types on the same date stay separate (e.g. "Service MX-5" and "Renew tax for MX-5" on the same day are two tasks).
+Rules:
+- The unit is the STEP, not the thing. "Order a bath panel" is a step. "Fix the bathroom" is not.
+- Single-step obligations (book MOT, renew insurance) must have exactly one step. Do not invent extra steps.
+- Recurring maintenance (watering, mowing) has one repeating step.
+- For ambiguous things, use best judgement on a sensible first step and obvious subsequent steps. Do not over-decompose.
+- ONE thing per subject per deadline. Never create both "MOT for Touran" and "Book MOT for Touran" — only the actionable thing with one step ("Book MOT for Touran").
+- Different work types on the same subject stay separate (e.g. "Service MX-5" and "Renew tax for MX-5" are two things).
 
-For each task return:
-- title: a clear, plain-English description of what needs doing (not too formal, keep their voice)
-- category: one of Home, Garden, Car, Admin, Family, Health, Finance, Other
-- urgency: one of "now" (urgent/time-sensitive), "soon" (next week or two), "someday" (no rush)
-- estimatedMinutes: rough number if you can infer it, otherwise null
-- next_due: ISO date YYYY-MM-DD when the narrator gives a specific deadline (MOT expiry, car tax due, insurance renewal, "due in March", etc.). Required whenever a calendar date or month is mentioned for a deadline. Use the next upcoming occurrence of that date from today.
-- due_date: same as next_due for hard calendar deadlines; otherwise null
-- recurrence: plain English description of when this needs doing again. For plant watering you MUST give two rates separated by a slash: summer rate and winter rate (e.g. "every 3-4 days in summer / every 12-14 days in winter"). Never give a single fixed interval for plant watering. For garden tasks reflect seasonal variation similarly. For home maintenance use intervals like "every 6 months" or "once a year". For one-off tasks use null.
-- recurrence_rule: structured recurrence for scheduling, or null for one-off tasks. Use exactly one of these shapes:
-  - { "type": "fixed", "days": number, "anchor": "completion" | "schedule" }
-  - { "type": "seasonal", "summerDays": number, "winterDays": number, "anchor": "completion" | "schedule" }
-  - { "type": "annual", "month": number (1-12), "day": number (1-31), "anchor": "schedule" }
+For each thing return:
+- name: plain English name, keep the narrator's voice (e.g. "Bath panel", "MOT", "Peace lily")
+- class: "obligation" if something bad happens if a date passes (MOT, tax, insurance, bills); otherwise "project"
+- notify_window: for obligations only — integer days before the step's next_due to first notify; null for projects
+- notify_time_of_day: "morning", "afternoon", or "evening" — when it makes most sense to act; null for projects
+- notify_escalate: true for hard-deadline obligations where a second closer-in reminder makes sense; false otherwise
+- steps: ordered array of step objects, each with:
+  - name: imperative plain English action ("Order the bath panel", not "Ordering")
+  - estimated_minutes: rough number if inferrable, otherwise null
+  - ends_cleanly: true if this step is self-contained and completing it is unambiguous; false if it may need multiple sessions or has a mandatory wait (e.g. paint drying)
+  - recurrence_rule: for recurring steps only — exactly one of:
+    - { "type": "fixed", "days": N, "anchor": "completion" }
+    - { "type": "seasonal", "summerDays": N, "winterDays": N, "anchor": "completion" }
+    - { "type": "annual", "month": 1-12, "day": 1-31, "anchor": "schedule" }
+    null for one-off steps
+  - next_due: ISO date YYYY-MM-DD for hard deadlines (MOT expiry, tax due, insurance renewal); null otherwise. Use the next upcoming occurrence from today.
 
-recurrence_rule rules:
-- Annual tasks (e.g. "once a year", specific calendar date) → type "annual", anchor "schedule"
-- Plant watering → always type "seasonal" (infer summerDays and winterDays from the recurrence text)
-- Everything else with a repeat interval → type "fixed" with anchor "completion", unless clearly tied to a fixed calendar date then use anchor "schedule"
-- If recurrence is unclear or absent → recurrence_rule: null
-- notify_days_before: integer. How many days before next_due to first notify. Examples: plant watering = 0 (notify on the day), MOT booking = 14, bin collection = 1, session planning = 2. One-off tasks with no deadline = 0.
-- notify_time_of_day: one of "morning", "afternoon", "evening". When it makes most sense to act. Bin collection = "evening", garden tasks = "morning", admin = "morning".
-- notify_escalate: boolean. True for hard deadline tasks where a second closer-in notification makes sense (MOT, annual tasks, fixed-date deadlines). Recurring maintenance = false.
+recurrence_rule guidance:
+- Plant watering → always "seasonal" (infer summerDays and winterDays from what the narrator says)
+- Annual calendar obligations → "annual" with anchor "schedule"
+- Everything else with a repeat interval → "fixed" with anchor "completion"
+- One-off steps → null
 
-Return ONLY a valid JSON array. No markdown, no code fences, no commentary before or after.
+Return ONLY a valid JSON array of things. No markdown, no code fences, no commentary.
 
-Example with a dated deadline:
-[{"title":"Book MOT","category":"Car","urgency":"soon","estimatedMinutes":15,"next_due":"2026-03-15","due_date":"2026-03-15","recurrence":"once a year","recurrence_rule":{"type":"annual","month":3,"day":15,"anchor":"schedule"},"notify_days_before":14,"notify_time_of_day":"morning","notify_escalate":true}]`
+Example:
+[{"name":"Bath panel","class":"project","notify_window":null,"notify_time_of_day":null,"notify_escalate":false,"steps":[{"name":"Measure up and order the right size panel","estimated_minutes":20,"ends_cleanly":true,"recurrence_rule":null,"next_due":null},{"name":"Remove old panel and treat mould on wall","estimated_minutes":45,"ends_cleanly":false,"recurrence_rule":null,"next_due":null},{"name":"Fit new panel and seal edges","estimated_minutes":60,"ends_cleanly":true,"recurrence_rule":null,"next_due":null}]},{"name":"MOT","class":"obligation","notify_window":14,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Book MOT at the garage","estimated_minutes":10,"ends_cleanly":true,"recurrence_rule":{"type":"annual","month":3,"day":15,"anchor":"schedule"},"next_due":"2026-03-15"}]}]`
 
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY?.trim()) {
@@ -81,8 +85,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unexpected response from AI" }, { status: 500 })
     }
 
-    const tasks = parseLifeWalkTasksFromModelText(textBlock.text)
-    return NextResponse.json({ tasks })
+    const things = parseLifeWalkThingsFromModelText(textBlock.text)
+    return NextResponse.json({ things })
   } catch (error) {
     if (error instanceof Anthropic.APIError) {
       return NextResponse.json(
@@ -92,15 +96,15 @@ export async function POST(req: NextRequest) {
     }
 
     const message =
-      error instanceof Error ? error.message : "Could not parse tasks"
+      error instanceof Error ? error.message : "Could not parse things"
 
     const isParseError =
       message.includes("JSON") ||
-      message.includes("No valid tasks") ||
+      message.includes("No valid things") ||
       message.includes("model response")
 
     return NextResponse.json(
-      { error: isParseError ? "Could not parse tasks. Try again or shorten your narration." : message },
+      { error: isParseError ? "Could not parse your narration. Try again or shorten it." : message },
       { status: 500 },
     )
   }

@@ -1,9 +1,9 @@
 -- Profiles (extends Supabase auth.users)
 create table profiles (
-  id            uuid primary key references auth.users on delete cascade,
-  timezone      text not null default 'Europe/London',
+  id              uuid primary key references auth.users on delete cascade,
+  timezone        text not null default 'Europe/London',
   onboarding_done bool not null default false,
-  created_at    timestamptz not null default now()
+  created_at      timestamptz not null default now()
 );
 
 alter table profiles enable row level security;
@@ -24,12 +24,15 @@ create policy "Profiles delete own"
   on profiles for delete
   using (auth.uid() = id);
 
--- Auto-create profile on signup
-create or replace function public.handle_new_user()
+-- Private schema — not exposed via PostgREST, so not callable via /rest/v1/rpc/
+create schema if not exists internal;
+
+-- Auto-create profile on signup (in internal schema to prevent direct RPC calls)
+create or replace function internal.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 begin
   insert into public.profiles (id)
@@ -41,56 +44,126 @@ $$;
 
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute function public.handle_new_user();
+  for each row execute function internal.handle_new_user();
 
 
 -- Enums
-create type task_priority as enum ('high', 'medium', 'low');
-create type task_energy   as enum ('low', 'medium', 'high');
-create type task_source   as enum ('life_walk', 'manual', 'voice', 'photo');
-create type task_status   as enum ('active', 'snoozed', 'archived');
-create type task_visibility as enum ('personal', 'family');
-create type event_type    as enum ('done', 'skipped', 'snoozed', 'edited');
+create type thing_class  as enum ('obligation', 'project');
+create type event_type   as enum ('done', 'edited', 'notified');
+create type task_source  as enum ('life_walk', 'manual', 'voice', 'photo');
+create type notify_time_of_day as enum ('morning', 'afternoon', 'evening');
 
 
--- Tasks
-create table tasks (
-  id                  uuid primary key default gen_random_uuid(),
-  user_id             uuid not null references auth.users on delete cascade,
+-- Things
+-- live_step_id is set after steps are inserted; FK added below to avoid circular dependency.
+create table things (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references auth.users on delete cascade,
 
-  title               text not null,
-  category            text not null,
-  space               text,
+  name            text not null,
+  class           thing_class not null default 'project',
 
-  priority            task_priority not null default 'medium',
-  energy              task_energy   not null default 'medium',
-  estimated_minutes   int,
+  -- obligations only
+  notify_window   int,               -- days before next_due to first notify
+  notify_time_of_day notify_time_of_day,
+  notify_escalate bool not null default false,
 
-  due_date            date,
-  next_due            date,
-  last_done_at        timestamptz,
+  source          task_source not null default 'life_walk',
 
-  recurrence_text     text,
-  recurrence_rule     jsonb,
-  context_tags        jsonb,
+  live_step_id    uuid,              -- FK constraint added after steps table exists
 
-  source              task_source     not null default 'manual',
-  status              task_status     not null default 'active',
-  visibility          task_visibility not null default 'personal',
+  started_at      timestamptz,       -- set when user taps to start; cleared on done/still-going
 
-  created_at          timestamptz not null default now(),
-  updated_at          timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
 );
 
-alter table tasks enable row level security;
-create policy "Users can manage their own tasks"
-  on tasks for all
+alter table things enable row level security;
+create policy "Users can manage their own things"
+  on things for all
   using (auth.uid() = user_id);
 
-create index tasks_user_status_next_due on tasks (user_id, status, next_due);
+create index things_user_id on things (user_id);
 
--- Auto-update updated_at
-create function touch_updated_at()
+
+-- Steps
+create table steps (
+  id                uuid primary key default gen_random_uuid(),
+  thing_id          uuid not null references things on delete cascade,
+  user_id           uuid not null references auth.users on delete cascade,
+
+  name              text not null,
+  step_order        int not null,
+
+  done              bool not null default false,
+  done_at           timestamptz,
+
+  ends_cleanly      bool not null default true,
+  estimated_minutes int,
+
+  recurrence_rule   jsonb,
+  next_due          date,
+  last_done_at      timestamptz,
+
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+alter table steps enable row level security;
+create policy "Users can manage their own steps"
+  on steps for all
+  using (auth.uid() = user_id);
+
+create index steps_thing_id       on steps (thing_id);
+create index steps_user_next_due  on steps (user_id, next_due);
+
+
+-- Add live_step_id FK now that steps exists
+alter table things
+  add constraint things_live_step_id_fkey
+  foreign key (live_step_id) references steps (id)
+  on delete set null
+  deferrable initially deferred;
+
+
+-- Step events
+create table step_events (
+  id          uuid primary key default gen_random_uuid(),
+  step_id     uuid not null references steps on delete cascade,
+  thing_id    uuid not null references things on delete cascade,
+  user_id     uuid not null references auth.users on delete cascade,
+  event_type  event_type not null,
+  metadata    jsonb,
+  created_at  timestamptz not null default now()
+);
+
+alter table step_events enable row level security;
+create policy "Users can manage their own step events"
+  on step_events for all
+  using (auth.uid() = user_id);
+
+create index step_events_step_id       on step_events (step_id);
+create index step_events_user_created  on step_events (user_id, created_at desc);
+
+
+-- Push subscriptions (unchanged)
+create table push_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users on delete cascade,
+  subscription jsonb not null,
+  endpoint     text not null,
+  created_at   timestamptz not null default now(),
+  unique (user_id, endpoint)
+);
+
+alter table push_subscriptions enable row level security;
+create policy "Users can manage their own push subscriptions"
+  on push_subscriptions for all
+  using (auth.uid() = user_id);
+
+
+-- updated_at trigger (shared)
+create or replace function touch_updated_at()
 returns trigger as $$
 begin
   new.updated_at = now();
@@ -98,25 +171,10 @@ begin
 end;
 $$ language plpgsql;
 
-create trigger tasks_updated_at
-  before update on tasks
+create trigger things_updated_at
+  before update on things
   for each row execute procedure touch_updated_at();
 
-
--- Task events (the "getting to know you" layer)
-create table task_events (
-  id          uuid primary key default gen_random_uuid(),
-  task_id     uuid not null references tasks on delete cascade,
-  user_id     uuid not null references auth.users on delete cascade,
-  event_type  event_type not null,
-  metadata    jsonb,
-  created_at  timestamptz not null default now()
-);
-
-alter table task_events enable row level security;
-create policy "Users can manage their own events"
-  on task_events for all
-  using (auth.uid() = user_id);
-
-create index task_events_user_created on task_events (user_id, created_at desc);
-create index task_events_task_id      on task_events (task_id);
+create trigger steps_updated_at
+  before update on steps
+  for each row execute procedure touch_updated_at();

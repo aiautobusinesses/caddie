@@ -34,91 +34,107 @@ export type Database = {
         }
         Relationships: []
       }
-      tasks: {
+      things: {
         Row: {
           id: string
           user_id: string
-          title: string
-          category: string
-          space: string | null
-          priority: Database["public"]["Enums"]["task_priority"]
-          energy: Database["public"]["Enums"]["task_energy"]
-          estimated_minutes: number | null
-          due_date: string | null
-          next_due: string | null
-          last_done_at: string | null
-          recurrence_text: string | null
-          recurrence_rule: Json | null
-          context_tags: Json | null
-          source: Database["public"]["Enums"]["task_source"]
-          status: Database["public"]["Enums"]["task_status"]
-          visibility: Database["public"]["Enums"]["task_visibility"]
-          chunked: boolean
-          snooze_budget: number
-          notify_days_before: number
-          notify_time_of_day: Database["public"]["Enums"]["notify_time_of_day"]
+          name: string
+          class: Database["public"]["Enums"]["thing_class"]
+          notify_window: number | null
+          notify_time_of_day: Database["public"]["Enums"]["notify_time_of_day"] | null
           notify_escalate: boolean
+          source: Database["public"]["Enums"]["task_source"]
+          live_step_id: string | null
+          started_at: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          title: string
-          category: string
-          space?: string | null
-          priority?: Database["public"]["Enums"]["task_priority"]
-          energy?: Database["public"]["Enums"]["task_energy"]
-          estimated_minutes?: number | null
-          due_date?: string | null
-          next_due?: string | null
-          last_done_at?: string | null
-          recurrence_text?: string | null
-          recurrence_rule?: Json | null
-          context_tags?: Json | null
-          source?: Database["public"]["Enums"]["task_source"]
-          status?: Database["public"]["Enums"]["task_status"]
-          visibility?: Database["public"]["Enums"]["task_visibility"]
-          chunked?: boolean
-          snooze_budget?: number
-          notify_days_before?: number
-          notify_time_of_day?: Database["public"]["Enums"]["notify_time_of_day"]
+          name: string
+          class?: Database["public"]["Enums"]["thing_class"]
+          notify_window?: number | null
+          notify_time_of_day?: Database["public"]["Enums"]["notify_time_of_day"] | null
           notify_escalate?: boolean
+          source?: Database["public"]["Enums"]["task_source"]
+          live_step_id?: string | null
+          started_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           user_id?: string
-          title?: string
-          category?: string
-          space?: string | null
-          priority?: Database["public"]["Enums"]["task_priority"]
-          energy?: Database["public"]["Enums"]["task_energy"]
-          estimated_minutes?: number | null
-          due_date?: string | null
-          next_due?: string | null
-          last_done_at?: string | null
-          recurrence_text?: string | null
-          recurrence_rule?: Json | null
-          context_tags?: Json | null
-          source?: Database["public"]["Enums"]["task_source"]
-          status?: Database["public"]["Enums"]["task_status"]
-          visibility?: Database["public"]["Enums"]["task_visibility"]
-          chunked?: boolean
-          snooze_budget?: number
-          notify_days_before?: number
-          notify_time_of_day?: Database["public"]["Enums"]["notify_time_of_day"]
+          name?: string
+          class?: Database["public"]["Enums"]["thing_class"]
+          notify_window?: number | null
+          notify_time_of_day?: Database["public"]["Enums"]["notify_time_of_day"] | null
           notify_escalate?: boolean
+          source?: Database["public"]["Enums"]["task_source"]
+          live_step_id?: string | null
+          started_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Relationships: []
       }
-      task_events: {
+      steps: {
         Row: {
           id: string
-          task_id: string
+          thing_id: string
+          user_id: string
+          name: string
+          step_order: number
+          done: boolean
+          done_at: string | null
+          ends_cleanly: boolean
+          estimated_minutes: number | null
+          recurrence_rule: Json | null
+          next_due: string | null
+          last_done_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          thing_id: string
+          user_id: string
+          name: string
+          step_order: number
+          done?: boolean
+          done_at?: string | null
+          ends_cleanly?: boolean
+          estimated_minutes?: number | null
+          recurrence_rule?: Json | null
+          next_due?: string | null
+          last_done_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          thing_id?: string
+          user_id?: string
+          name?: string
+          step_order?: number
+          done?: boolean
+          done_at?: string | null
+          ends_cleanly?: boolean
+          estimated_minutes?: number | null
+          recurrence_rule?: Json | null
+          next_due?: string | null
+          last_done_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      step_events: {
+        Row: {
+          id: string
+          step_id: string
+          thing_id: string
           user_id: string
           event_type: Database["public"]["Enums"]["event_type"]
           metadata: Json | null
@@ -126,7 +142,8 @@ export type Database = {
         }
         Insert: {
           id?: string
-          task_id: string
+          step_id: string
+          thing_id: string
           user_id: string
           event_type: Database["public"]["Enums"]["event_type"]
           metadata?: Json | null
@@ -134,7 +151,8 @@ export type Database = {
         }
         Update: {
           id?: string
-          task_id?: string
+          step_id?: string
+          thing_id?: string
           user_id?: string
           event_type?: Database["public"]["Enums"]["event_type"]
           metadata?: Json | null
@@ -170,12 +188,9 @@ export type Database = {
     Views: Record<string, never>
     Functions: Record<string, never>
     Enums: {
-      task_priority: "high" | "medium" | "low"
-      task_energy: "low" | "medium" | "high"
+      thing_class: "obligation" | "project"
       task_source: "life_walk" | "manual" | "voice" | "photo"
-      task_status: "active" | "snoozed" | "archived"
-      task_visibility: "personal" | "family"
-      event_type: "done" | "skipped" | "snoozed" | "edited" | "notified"
+      event_type: "done" | "edited" | "notified"
       notify_time_of_day: "morning" | "afternoon" | "evening"
     }
     CompositeTypes: Record<string, never>
