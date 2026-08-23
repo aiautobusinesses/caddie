@@ -335,7 +335,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
                             disabled={peekLoading[item.thing_id]}
                             className="text-[12px] font-bold text-[#5a6070] hover:text-[#9aa0b0] transition-colors disabled:opacity-40"
                           >
-                            {peekLoading[item.thing_id] ? "Thinking…" : "Where to start?"}
+                            {peekLoading[item.thing_id] ? "Thinking…" : "Break this task down"}
                           </button>
                         </div>
                       )}
@@ -361,9 +361,6 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
                   >
                     Show me three others
                   </button>
-                  <p className="text-[11.5px] leading-[1.4] text-[#5a6070]">
-                    None of these? Nothing bad happens.
-                  </p>
                 </div>
               </div>
             )}
@@ -554,7 +551,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
           className="flex-1 text-left px-5 py-[14px] pb-[22px] text-[11px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-[#1e2128]"
           style={{ color: screen === "settings" ? "#e8eaf0" : "#5a6070" }}
         >
-          You
+          Settings
         </button>
       </div>
 
