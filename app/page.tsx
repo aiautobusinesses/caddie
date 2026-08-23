@@ -24,13 +24,13 @@ export default async function Home() {
     .select(`
       id, name, class, notify_window, live_step_id, started_at,
       steps!steps_thing_id_fkey (
-        id, name, estimated_minutes, recurrence_rule,
-        next_due, last_done_at, step_order
+        id, name, band, mode, shape, recurrence_rule,
+        next_due, last_done_at, step_order, done
       )
     `)
     .eq("user_id", user.id)
 
-  type RawStep = { id: string; name: string; estimated_minutes: number | null; recurrence_rule: unknown; next_due: string | null; last_done_at: string | null; step_order: number }
+  type RawStep = { id: string; name: string; band: "short" | "sitting" | "run"; mode: "thinking" | "doing"; shape: "clean" | "bleeds"; recurrence_rule: unknown; next_due: string | null; last_done_at: string | null; step_order: number; done: boolean }
   type RawThing = { id: string; name: string; class: string; notify_window: number | null; live_step_id: string | null; started_at: string | null; steps: RawStep[] }
 
   const rows = (things ?? []) as RawThing[]
@@ -60,13 +60,19 @@ export default async function Home() {
       if (days === 1) return "due tomorrow"
       if (days <= 7) return `due in ${days} days`
     }
+    if (step?.band === "short") return "quick one"
     return null
   }
 
   // Check for in-progress thing
   const inProgressRow = rows.find((t) => t.started_at != null)
   const initialInProgress: InProgressThing | null = inProgressRow
-    ? { thing_id: inProgressRow.id, thing_name: inProgressRow.name, started_at: inProgressRow.started_at! }
+    ? {
+        thing_id: inProgressRow.id,
+        thing_name: inProgressRow.name,
+        step_name: inProgressRow.steps.find((s) => s.id === inProgressRow.live_step_id)?.name ?? inProgressRow.name,
+        started_at: inProgressRow.started_at!,
+      }
     : null
 
   if (initialInProgress) {
@@ -87,12 +93,12 @@ export default async function Home() {
 
   function pickWithSpread(items: RawThing[]): RawThing[] {
     if (items.length <= 3) return items
-    const getMin = (t: RawThing) => t.steps.find((s) => s.id === t.live_step_id)?.estimated_minutes ?? null
-    const quick = items.filter((t) => { const m = getMin(t); return m != null && m <= 15 })
-    const medium = items.filter((t) => { const m = getMin(t); return m != null && m > 15 && m <= 45 })
-    const long = items.filter((t) => { const m = getMin(t); return m == null || m > 45 })
+    const getBand = (t: RawThing) => t.steps.find((s) => s.id === t.live_step_id)?.band ?? "sitting"
+    const short   = items.filter((t) => getBand(t) === "short")
+    const sitting = items.filter((t) => getBand(t) === "sitting")
+    const run     = items.filter((t) => getBand(t) === "run")
     const picked: RawThing[] = []
-    for (const bucket of [quick, medium, long]) {
+    for (const bucket of [short, sitting, run]) {
       if (picked.length < 3 && bucket.length > 0) picked.push(bucket[0])
     }
     for (const t of items) {
@@ -109,7 +115,9 @@ export default async function Home() {
     return {
       thing_id: t.id,
       thing_name: t.name,
-      estimated_minutes: live?.estimated_minutes ?? null,
+      step_id: live?.id ?? t.id,
+      step_name: live?.name ?? `Next thing on ${t.name}`,
+      band: live?.band ?? "sitting",
       reason: buildReason(t, live),
     }
   })

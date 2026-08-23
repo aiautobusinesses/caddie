@@ -63,7 +63,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
 
   async function handleStart(item: OfferItem) {
     // Transition immediately — don't wait for the API
-    setInProgress({ thing_id: item.thing_id, thing_name: item.thing_name, started_at: new Date().toISOString() })
+    setInProgress({ thing_id: item.thing_id, thing_name: item.thing_name, step_name: item.step_name, started_at: new Date().toISOString() })
     setBreakdown(null)
     setScreen("in_progress")
 
@@ -169,7 +169,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
                 className="w-full text-left bg-[#1e2128] border border-[#2c3040] rounded-3xl px-6 py-6 hover:border-[#3a4155] hover:bg-[#22262f] transition-all disabled:opacity-40"
               >
                 <p className="text-xl font-medium text-[#e8eaf0] leading-relaxed" style={{ fontFamily: "var(--font-lora)" }}>
-                  {item.thing_name}
+                  {item.step_name}
                 </p>
                 {item.reason && (
                   <p className="text-xs text-[#5a6070] mt-2">{item.reason}</p>
@@ -195,12 +195,12 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
           {isReturn ? "Welcome back" : "You\u2019re doing this"}
         </p>
 
-        {/* Thing name */}
+        {/* Step name */}
         <div className="bg-[#1e2128] border border-[#2c3040] rounded-3xl px-6 py-8 mb-4 text-center">
           {isReturn && (
             <p className="text-sm text-[#5a6070] mb-3">Did you finish?</p>
           )}
-          <p className="text-2xl font-semibold text-[#e8eaf0] leading-snug" style={{ fontFamily: "var(--font-lora)" }}>{thingName}</p>
+          <p className="text-2xl font-semibold text-[#e8eaf0] leading-snug" style={{ fontFamily: "var(--font-lora)" }}>{inProgress?.step_name ?? thingName}</p>
         </div>
 
         {/* Error */}

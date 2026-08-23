@@ -9,24 +9,30 @@ import { parseRecurrenceRule } from "@/lib/recurrence"
 export type OfferItem = {
   thing_id: string
   thing_name: string
-  estimated_minutes: number | null
+  step_id: string
+  step_name: string
+  band: "short" | "sitting" | "run"
   reason: string | null
 }
 
 export type InProgressThing = {
   thing_id: string
   thing_name: string
+  step_name: string
   started_at: string
 }
 
 type StepRow = {
   id: string
   name: string
-  estimated_minutes: number | null
+  band: "short" | "sitting" | "run"
+  mode: "thinking" | "doing"
+  shape: "clean" | "bleeds"
   recurrence_rule: unknown
   next_due: string | null
   last_done_at: string | null
   step_order: number
+  done: boolean
 }
 
 type ThingRow = {
@@ -71,7 +77,7 @@ function buildReason(thing: ThingRow, step: StepRow | undefined, today: string):
     }
   }
 
-  // Obligation or recurring step with a next_due but no history
+  // Step with a next_due
   if (step?.next_due) {
     const days = daysBetween(today, step.next_due)
     if (days <= 0) return "due now"
@@ -79,28 +85,29 @@ function buildReason(thing: ThingRow, step: StepRow | undefined, today: string):
     if (days <= 7) return `due in ${days} days`
   }
 
-  // No meaningful reason to show
+  // Band-based reason — only show if genuinely useful
+  if (step?.band === "short") return "quick one"
+
+  // No meaningful reason
   return null
 }
 
 // ---------------------------------------------------------------------------
-// Shape spread — prefer variety across time estimates
+// Shape spread — prefer variety across band
 // ---------------------------------------------------------------------------
 
 function pickWithSpread(items: ThingRow[]): ThingRow[] {
   if (items.length <= 3) return items
 
-  const getMinutes = (t: ThingRow) => {
-    const live = t.steps.find((s) => s.id === t.live_step_id)
-    return live?.estimated_minutes ?? null
-  }
+  const getBand = (t: ThingRow) =>
+    t.steps.find((s) => s.id === t.live_step_id)?.band ?? "sitting"
 
-  const quick = items.filter((t) => { const m = getMinutes(t); return m != null && m <= 15 })
-  const medium = items.filter((t) => { const m = getMinutes(t); return m != null && m > 15 && m <= 45 })
-  const long = items.filter((t) => { const m = getMinutes(t); return m == null || m > 45 })
+  const short   = items.filter((t) => getBand(t) === "short")
+  const sitting = items.filter((t) => getBand(t) === "sitting")
+  const run     = items.filter((t) => getBand(t) === "run")
 
   const picked: ThingRow[] = []
-  for (const bucket of [quick, medium, long]) {
+  for (const bucket of [short, sitting, run]) {
     if (picked.length < 3 && bucket.length > 0) picked.push(bucket[0])
   }
   for (const t of items) {
@@ -126,8 +133,8 @@ export async function GET() {
     .select(`
       id, name, class, notify_window, live_step_id, started_at,
       steps!steps_thing_id_fkey (
-        id, name, estimated_minutes, recurrence_rule,
-        next_due, last_done_at, step_order
+        id, name, band, mode, shape, recurrence_rule,
+        next_due, last_done_at, step_order, done
       )
     `)
     .eq("user_id", user.id)
@@ -139,18 +146,19 @@ export async function GET() {
   // Check for in-progress thing
   const inProgress = things.find((t) => t.started_at != null)
   if (inProgress) {
+    const liveStep = inProgress.steps.find((s) => s.id === inProgress.live_step_id)
     return NextResponse.json({
       in_progress: {
         thing_id: inProgress.id,
         thing_name: inProgress.name,
+        step_name: liveStep?.name ?? inProgress.name,
         started_at: inProgress.started_at as string,
       } satisfies InProgressThing,
       offer: [],
     })
   }
 
-  // Build offer from things that still have work to do (live_step_id not null,
-  // or no steps at all — treat stepless things as always available)
+  // Build offer from things that still have work to do
   const available = things.filter((t) => t.live_step_id != null || t.steps.length === 0)
 
   const obligations = available.filter((t) => {
@@ -171,7 +179,9 @@ export async function GET() {
     return {
       thing_id: thing.id,
       thing_name: thing.name,
-      estimated_minutes: liveStep?.estimated_minutes ?? null,
+      step_id: liveStep?.id ?? thing.id,
+      step_name: liveStep?.name ?? `Next thing on ${thing.name}`,
+      band: liveStep?.band ?? "sitting",
       reason: buildReason(thing, liveStep, today),
     }
   })

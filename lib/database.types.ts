@@ -88,8 +88,9 @@ export type Database = {
           step_order: number
           done: boolean
           done_at: string | null
-          ends_cleanly: boolean
-          estimated_minutes: number | null
+          band: Database["public"]["Enums"]["step_band"]
+          mode: Database["public"]["Enums"]["step_mode"]
+          shape: Database["public"]["Enums"]["step_shape"]
           recurrence_rule: Json | null
           next_due: string | null
           last_done_at: string | null
@@ -104,8 +105,9 @@ export type Database = {
           step_order: number
           done?: boolean
           done_at?: string | null
-          ends_cleanly?: boolean
-          estimated_minutes?: number | null
+          band?: Database["public"]["Enums"]["step_band"]
+          mode?: Database["public"]["Enums"]["step_mode"]
+          shape?: Database["public"]["Enums"]["step_shape"]
           recurrence_rule?: Json | null
           next_due?: string | null
           last_done_at?: string | null
@@ -120,8 +122,9 @@ export type Database = {
           step_order?: number
           done?: boolean
           done_at?: string | null
-          ends_cleanly?: boolean
-          estimated_minutes?: number | null
+          band?: Database["public"]["Enums"]["step_band"]
+          mode?: Database["public"]["Enums"]["step_mode"]
+          shape?: Database["public"]["Enums"]["step_shape"]
           recurrence_rule?: Json | null
           next_due?: string | null
           last_done_at?: string | null
@@ -190,8 +193,11 @@ export type Database = {
     Enums: {
       thing_class: "obligation" | "project"
       task_source: "life_walk" | "manual" | "voice" | "photo"
-      event_type: "done" | "edited" | "notified"
+      event_type: "done" | "edited" | "notified" | "offered" | "accepted" | "skipped" | "nudged_back" | "nudged_forward"
       notify_time_of_day: "morning" | "afternoon" | "evening"
+      step_band: "short" | "sitting" | "run"
+      step_mode: "thinking" | "doing"
+      step_shape: "clean" | "bleeds"
     }
     CompositeTypes: Record<string, never>
   }

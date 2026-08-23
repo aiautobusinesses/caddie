@@ -1,5 +1,5 @@
 import { parseRecurrenceRule, normalizeDateOnly } from "@/lib/recurrence"
-import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass } from "@/lib/tasks"
+import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass, StepBand, StepMode, StepShape } from "@/lib/tasks"
 import { isTaskUrgency } from "@/lib/tasks"
 
 // ---------------------------------------------------------------------------
@@ -34,19 +34,31 @@ function extractJsonPayload(text: string): unknown {
 // Step normalisation
 // ---------------------------------------------------------------------------
 
+const BANDS: readonly StepBand[] = ["short", "sitting", "run"]
+const MODES: readonly StepMode[] = ["thinking", "doing"]
+const SHAPES: readonly StepShape[] = ["clean", "bleeds"]
+
+function normalizeBand(value: unknown): StepBand {
+  if (typeof value === "string" && (BANDS as string[]).includes(value)) return value as StepBand
+  return "sitting"
+}
+
+function normalizeMode(value: unknown): StepMode {
+  if (typeof value === "string" && (MODES as string[]).includes(value)) return value as StepMode
+  return "doing"
+}
+
+function normalizeShape(value: unknown): StepShape {
+  if (typeof value === "string" && (SHAPES as string[]).includes(value)) return value as StepShape
+  return "clean"
+}
+
 function normalizeStep(raw: unknown): LifeWalkExtractedStep | null {
   if (!raw || typeof raw !== "object") return null
   const item = raw as Record<string, unknown>
 
   const name = typeof item.name === "string" ? item.name.trim() : ""
   if (!name) return null
-
-  let estimated_minutes: number | null = null
-  if (typeof item.estimated_minutes === "number" && Number.isFinite(item.estimated_minutes)) {
-    estimated_minutes = item.estimated_minutes
-  }
-
-  const ends_cleanly = item.ends_cleanly !== false
 
   const recurrence_rule =
     item.recurrence_rule && typeof item.recurrence_rule === "object"
@@ -55,7 +67,14 @@ function normalizeStep(raw: unknown): LifeWalkExtractedStep | null {
 
   const next_due = normalizeDateOnly(item.next_due)
 
-  return { name, estimated_minutes, ends_cleanly, recurrence_rule, next_due }
+  return {
+    name,
+    band: normalizeBand(item.band),
+    mode: normalizeMode(item.mode),
+    shape: normalizeShape(item.shape),
+    recurrence_rule,
+    next_due,
+  }
 }
 
 // ---------------------------------------------------------------------------

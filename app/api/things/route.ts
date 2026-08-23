@@ -57,8 +57,9 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       name: step.name.trim(),
       step_order: idx,
-      ends_cleanly: step.ends_cleanly ?? true,
-      estimated_minutes: step.estimated_minutes ?? null,
+      band: step.band ?? "sitting",
+      mode: step.mode ?? "doing",
+      shape: step.shape ?? "clean",
       recurrence_rule: step.recurrence_rule
         ? (parseRecurrenceRule(step.recurrence_rule) as unknown as import("@/lib/database.types").Json)
         : null,

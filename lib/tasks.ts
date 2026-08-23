@@ -5,6 +5,9 @@ export type ThingClass = Database["public"]["Enums"]["thing_class"]
 export type TaskSource = Database["public"]["Enums"]["task_source"]
 export type EventType = Database["public"]["Enums"]["event_type"]
 export type NotifyTimeOfDay = Database["public"]["Enums"]["notify_time_of_day"]
+export type StepBand = Database["public"]["Enums"]["step_band"]
+export type StepMode = Database["public"]["Enums"]["step_mode"]
+export type StepShape = Database["public"]["Enums"]["step_shape"]
 
 export type ThingRow = Database["public"]["Tables"]["things"]["Row"]
 export type ThingInsert = Database["public"]["Tables"]["things"]["Insert"]
@@ -15,7 +18,10 @@ export type StepEventRow = Database["public"]["Tables"]["step_events"]["Row"]
 /** Event inputs accepted by the API; `why` is stored as `edited` with metadata. */
 export type StepEventInput = EventType | "why"
 
-const STEP_EVENT_INPUTS: readonly StepEventInput[] = ["done", "edited", "notified", "why"]
+const STEP_EVENT_INPUTS: readonly StepEventInput[] = [
+  "done", "edited", "notified", "offered", "accepted",
+  "skipped", "nudged_back", "nudged_forward", "why",
+]
 
 export function isStepEventInput(value: string): value is StepEventInput {
   return (STEP_EVENT_INPUTS as readonly string[]).includes(value)
@@ -36,8 +42,9 @@ export function isTaskUrgency(value: string): value is TaskUrgency {
 /** Shape Claude returns for a single extracted step. */
 export type LifeWalkExtractedStep = {
   name: string
-  estimated_minutes: number | null
-  ends_cleanly: boolean
+  band: StepBand
+  mode: StepMode
+  shape: StepShape
   recurrence_rule: RecurrenceRule | null
   next_due: string | null
 }
