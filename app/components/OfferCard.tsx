@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react"
 import type { OfferItem, InProgressThing } from "@/app/api/offer/route"
+import Spinner from "./Spinner"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -12,19 +13,6 @@ type Screen = "offer" | "in_progress" | "return"
 type Props = {
   initialOffer: OfferItem[]
   initialInProgress: InProgressThing | null
-}
-
-// ---------------------------------------------------------------------------
-// Spinner
-// ---------------------------------------------------------------------------
-
-function Spinner() {
-  return (
-    <svg className="animate-spin text-gray-300" width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +117,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
 
   if (refreshing) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-dvh">
         <Spinner />
       </div>
     )
@@ -137,9 +125,9 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
 
   if (fetchError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center gap-4">
-        <p className="text-sm text-red-500">{fetchError}</p>
-        <button type="button" onClick={() => void refreshOffer()} className="text-sm text-gray-600 underline">
+      <div className="flex flex-col items-center justify-center min-h-dvh px-6 text-center gap-4">
+        <p className="text-sm text-red-400">{fetchError}</p>
+        <button type="button" onClick={() => void refreshOffer()} className="text-sm text-[#5a6070] underline">
           Try again
         </button>
       </div>
@@ -150,10 +138,10 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
   if (screen === "offer") {
     if (offer.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
-          <p className="text-2xl font-semibold text-gray-700">Nothing for now.</p>
-          <p className="text-sm text-gray-400 mt-2 mb-6">Caddie will let you know when something needs doing.</p>
-          <button type="button" onClick={() => void refreshOffer()} className="text-sm text-gray-500 underline">
+        <div className="flex flex-col items-center justify-center min-h-dvh px-6 text-center">
+          <p className="text-2xl font-semibold text-[#e8eaf0]">Nothing needs doing right now.</p>
+          <p className="text-sm text-[#5a6070] mt-2 mb-6">Come back whenever you want something to do.</p>
+          <button type="button" onClick={() => void refreshOffer()} className="text-sm text-[#5a6070] underline">
             Check again
           </button>
         </div>
@@ -161,14 +149,14 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
     }
 
     return (
-      <div className="flex flex-col justify-center min-h-screen px-6 py-12">
+      <div className="flex flex-col justify-center min-h-dvh px-6 py-12">
         <div className="w-full max-w-sm mx-auto">
-          <p className="text-xs uppercase tracking-widest text-gray-400 mb-6 text-center">
-            Pick something to start
+          <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-6 text-center">
+            What do you fancy?
           </p>
 
           {actionError && (
-            <p className="text-sm text-red-500 text-center mb-4">{actionError}</p>
+            <p className="text-sm text-red-400 text-center mb-4">{actionError}</p>
           )}
 
           <div className="flex flex-col gap-3">
@@ -178,13 +166,13 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
                 type="button"
                 disabled={loadingAction}
                 onClick={() => void handleStart(item)}
-                className="w-full text-left bg-white border border-gray-100 rounded-3xl px-6 py-5 shadow-sm hover:border-gray-200 hover:shadow transition-all disabled:opacity-40"
+                className="w-full text-left bg-[#1e2128] border border-[#2c3040] rounded-3xl px-6 py-6 hover:border-[#3a4155] hover:bg-[#22262f] transition-all disabled:opacity-40"
               >
-                <p className="text-lg font-semibold text-gray-800 leading-snug">
+                <p className="text-xl font-medium text-[#e8eaf0] leading-relaxed" style={{ fontFamily: "var(--font-lora)" }}>
                   {item.thing_name}
                 </p>
                 {item.reason && (
-                  <p className="text-xs text-gray-400 mt-1.5">{item.reason}</p>
+                  <p className="text-xs text-[#5a6070] mt-2">{item.reason}</p>
                 )}
               </button>
             ))}
@@ -199,25 +187,25 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
   const thingName = inProgress?.thing_name ?? ""
 
   return (
-    <div className="flex flex-col justify-center min-h-screen px-6 py-12">
+    <div className="flex flex-col justify-center min-h-dvh px-6 py-12">
       <div className="w-full max-w-sm mx-auto">
 
         {/* Heading */}
-        <p className="text-xs uppercase tracking-widest text-gray-400 mb-4 text-center">
-          {isReturn ? "Welcome back" : "In progress"}
+        <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-4 text-center">
+          {isReturn ? "Welcome back" : "You\u2019re doing this"}
         </p>
 
         {/* Thing name */}
-        <div className="bg-white border border-gray-100 rounded-3xl px-6 py-8 shadow-sm mb-4 text-center">
+        <div className="bg-[#1e2128] border border-[#2c3040] rounded-3xl px-6 py-8 mb-4 text-center">
           {isReturn && (
-            <p className="text-sm text-gray-400 mb-3">Did you finish?</p>
+            <p className="text-sm text-[#5a6070] mb-3">Did you finish?</p>
           )}
-          <p className="text-2xl font-semibold text-gray-800 leading-snug">{thingName}</p>
+          <p className="text-2xl font-semibold text-[#e8eaf0] leading-snug" style={{ fontFamily: "var(--font-lora)" }}>{thingName}</p>
         </div>
 
         {/* Error */}
         {actionError && (
-          <p className="text-sm text-red-500 text-center mb-4">{actionError}</p>
+          <p className="text-sm text-red-400 text-center mb-4">{actionError}</p>
         )}
 
         {/* Done / Still going buttons */}
@@ -226,7 +214,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
             type="button"
             disabled={loadingAction}
             onClick={() => void handleDone(false)}
-            className="w-full bg-gray-900 text-white rounded-2xl py-4 text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-30"
+            className="w-full bg-[#e8eaf0] text-[#16181c] rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30"
           >
             {loadingAction ? "Saving…" : "Done"}
           </button>
@@ -234,7 +222,7 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
             type="button"
             disabled={loadingAction}
             onClick={() => void handleDone(true)}
-            className="w-full bg-gray-100 text-gray-700 rounded-2xl py-4 text-sm font-semibold hover:bg-gray-200 transition-colors disabled:opacity-30"
+            className="w-full bg-[#262b35] text-[#9aa0b0] rounded-2xl py-4 text-sm font-semibold hover:bg-[#2c3040] transition-colors disabled:opacity-30"
           >
             Still going
           </button>
@@ -247,22 +235,22 @@ export default function OfferCard({ initialOffer, initialInProgress }: Props) {
               type="button"
               disabled={loadingBreakdown || loadingAction}
               onClick={() => void handleBreakdown()}
-              className="text-sm text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 inline-flex items-center gap-2"
+              className="text-sm text-[#5a6070] hover:text-[#9aa0b0] transition-colors disabled:opacity-40 inline-flex items-center gap-2"
             >
               {loadingBreakdown && <Spinner />}
-              {loadingBreakdown ? "Thinking…" : "Not sure where to start?"}
+              {loadingBreakdown ? "Thinking…" : "Break it into steps"}
             </button>
           </div>
         )}
 
         {/* Breakdown result */}
         {breakdown && (
-          <div className="mt-2 bg-gray-50 rounded-2xl px-5 py-4">
-            <p className="text-xs uppercase tracking-widest text-gray-400 mb-3">Where to start</p>
+          <div className="mt-2 bg-[#1e2128] border border-[#2c3040] rounded-2xl px-5 py-4">
+            <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-3">Where to start</p>
             <ol className="flex flex-col gap-2">
               {breakdown.map((step, i) => (
-                <li key={i} className="flex gap-3 text-sm text-gray-700">
-                  <span className="text-gray-300 flex-shrink-0 w-4">{i + 1}.</span>
+                <li key={i} className="flex gap-3 text-sm text-[#9aa0b0]">
+                  <span className="text-[#3a4155] flex-shrink-0 w-4">{i + 1}.</span>
                   <span>{step}</span>
                 </li>
               ))}

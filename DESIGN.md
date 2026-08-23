@@ -126,6 +126,34 @@ Things done, no percentages, no penalty for gaps. Possibly a display in the hous
 
 ---
 
+## UI decisions
+
+### Step name vs thing name on the offer card
+The offer card shows the **thing name** ("Bath panel"), not the live step name ("Order a bath panel"). The step name is stored and used internally for sequencing, but surfacing it on the offer card asks the user to validate whether it's correct before they've started. That's friction at the worst moment. The thing name is shown; the step is implied. If the user is uncertain what to do first, "Break it into steps" reveals the current step without making it the default view.
+
+### "What do you fancy?" not "Pick something to start"
+The offer is not a menu. Framing it as a pick recreates the decision paralysis Caddie is meant to dissolve. The heading is casual and low-pressure — Caddie has already done the selecting, the user just decides whether to start.
+
+### "You're doing this" not "In progress"
+Status labels narrate state. "In progress" describes what the system knows. "You're doing this" addresses the person doing it — more grounding, less administrative.
+
+### "Break it into steps" not "Not sure where to start?"
+The original copy second-guessed the user immediately after they'd committed to starting something. The replacement is neutral and descriptive.
+
+### FAB position: bottom-right
+The capture button sits at `bottom-6 right-6`. Top-right conflicts with iOS browser back-gesture zone and system UI in standalone PWA mode. Bottom-right is the standard FAB position and stays clear of both.
+
+### `min-h-dvh` not `min-h-screen`
+All full-height containers use `min-h-dvh` (dynamic viewport height). On mobile, `min-h-screen` does not account for the browser's collapsible chrome, leaving a visible gap at the bottom or causing overflow. `dvh` resolves to the correct available height.
+
+### Empty state copy
+"Nothing needs doing right now." — factual, not reassuring. The previous copy ("Caddie will let you know when something needs doing") implied push notifications that are not built yet.
+
+### Colour scheme: Deep Ink
+Dark mode throughout. Near-black background (`#16181c`), dark blue-grey cards (`#1e2128`), border at `#2c3040`, muted text at `#5a6070`, primary text at `#e8eaf0`, secondary text at `#9aa0b0`. Primary action button is light (`#e8eaf0` on `#16181c`) — inverted from the dark background, high contrast without colour. The scheme reads well as a home-screen PWA and removes the visual noise of a white-on-bright-background UI.
+
+---
+
 ## Architecture
 
 A **small API with several clients**, not a web app with features. Voice forces this: if a sentence can arrive from a speaker as well as a screen, capture, completion and offer must exist as endpoints before they exist as UI.

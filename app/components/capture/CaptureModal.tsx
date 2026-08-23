@@ -18,12 +18,12 @@ export default function CaptureModal() {
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <button
         type="button"
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-black/60"
         onClick={closeCapture}
         aria-label="Close capture"
       />
-      <div className="relative bg-white rounded-t-3xl max-h-[92vh] overflow-y-auto shadow-xl">
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-2" />
+      <div className="relative bg-[#16181c] border-t border-[#2c3040] rounded-t-3xl max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-[#2c3040] rounded-full mx-auto mt-3 mb-2" />
         <TaskCaptureFlow variant="capture" onSaved={handleSaved} onClose={closeCapture} />
       </div>
     </div>

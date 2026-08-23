@@ -64,14 +64,14 @@ export default function SwipeableThingRow({
         style={{
           transform: `translateX(${dx}px)`,
           transition: isDragging ? "none" : "transform 0.2s ease",
-          backgroundColor: `rgba(254,242,242,${swipeProgress * 0.8})`,
+          backgroundColor: `color-mix(in srgb, #3d1a1a ${Math.round(swipeProgress * 80)}%, #1e2128)`,
           touchAction: "pan-y",
           cursor: "grab",
         }}
-        className="relative border border-gray-100 rounded-2xl px-5 py-4 select-none"
+        className="relative border border-[#2c3040] rounded-2xl px-5 py-4 select-none"
       >
-        <p className="text-sm font-medium text-gray-800">{thing.name}</p>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-sm font-medium text-[#e8eaf0]">{thing.name}</p>
+        <p className="text-xs text-[#5a6070] mt-1">
           {thing.steps.length} {thing.steps.length === 1 ? "step" : "steps"}
           {thing.steps[0] ? ` · ${thing.steps[0].name}` : ""}
         </p>
