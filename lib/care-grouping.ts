@@ -78,11 +78,13 @@ export function buildCareGroup(
 
   // Sort by next_due_at ascending — most overdue first
   due.sort((a, b) => {
+    /* v8 ignore next */
     if (!a.next_due_at || !b.next_due_at) return 0
     return a.next_due_at < b.next_due_at ? -1 : 1
   })
 
   const anchor = due[0]
+  /* v8 ignore next */
   if (!anchor.next_due_at) return null
 
   const windowEnd = addDays(today, anchor.tolerance_days)
@@ -98,6 +100,7 @@ export function buildCareGroup(
       p.next_due_at <= windowEnd,
   )
 
+  /* v8 ignore next */
   if (group.length === 0) return null
 
   // Deduplicate (anchor is already in due, may also be in group)

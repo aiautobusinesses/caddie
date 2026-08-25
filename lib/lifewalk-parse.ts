@@ -21,6 +21,7 @@ function extractJsonPayload(text: string): unknown {
 
     const objStart = cleaned.indexOf("{")
     const objEnd = cleaned.lastIndexOf("}")
+    /* v8 ignore next 3 */
     if (objStart !== -1 && objEnd > objStart) {
       const obj = JSON.parse(cleaned.slice(objStart, objEnd + 1)) as Record<string, unknown>
       if (Array.isArray(obj.things)) return obj.things

@@ -67,6 +67,7 @@ Object.defineProperty(window, "atob", {
 })
 
 Object.defineProperty(globalThis, "Notification", {
+  configurable: true,
   writable: true,
   value: {
     permission: "default",

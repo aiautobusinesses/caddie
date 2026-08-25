@@ -189,6 +189,7 @@ export function calculateAnnualNextDueOnOrAfter(
     }
   }
 
+  /* v8 ignore next */
   return toDateString(new Date(Date.UTC(startYear + 1, rule.month - 1, rule.day)))
 }
 

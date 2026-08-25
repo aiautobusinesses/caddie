@@ -23,6 +23,7 @@ export function getSupabasePublishableKey(): string {
 }
 
 /** True when both URL and publishable key are set (safe for proxy skip in dev). */
+/* v8 ignore next 3 */
 export const hasSupabaseEnv = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,

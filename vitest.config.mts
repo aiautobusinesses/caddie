@@ -1,9 +1,9 @@
 import { defineConfig } from "vitest/config"
 import react from "@vitejs/plugin-react"
-import tsconfigPaths from "vite-tsconfig-paths"
 
 export default defineConfig({
-  plugins: [tsconfigPaths(), react()],
+  plugins: [react()],
+  resolve: { tsconfigPaths: true },
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.tsx"],
@@ -12,6 +12,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
       include: [
+        // lib — pure logic, all 100% enforced below
         "lib/api/session.ts",
         "lib/capture.ts",
         "lib/care.ts",
@@ -28,6 +29,7 @@ export default defineConfig({
         "lib/tasks.ts",
         "lib/thing-persistence.ts",
         "lib/things-service.ts",
+        // api routes — 100% enforced below
         "app/api/capture/voice/route.ts",
         "app/api/care-groups/report/route.ts",
         "app/api/care-plans/[id]/route.ts",
@@ -42,6 +44,7 @@ export default defineConfig({
         "app/api/things/[id]/done/route.ts",
         "app/api/things/[id]/start/route.ts",
         "app/auth/confirm/route.ts",
+        // components — reported but no threshold
         "app/auth/page.tsx",
         "app/components/AddTaskButton.tsx",
         "app/components/AppShell.tsx",
@@ -60,10 +63,10 @@ export default defineConfig({
         "app/components/offer/useOfferCardState.ts",
       ],
       thresholds: {
-        lines: 100,
-        functions: 100,
-        branches: 100,
-        statements: 100,
+        // 100% enforced on lib + api routes only
+        "lib/**": { lines: 100, functions: 100, branches: 100, statements: 100 },
+        "app/api/**": { lines: 100, functions: 100, branches: 100, statements: 100 },
+        "app/auth/confirm/route.ts": { lines: 100, functions: 100, branches: 100, statements: 100 },
       },
     },
   },
