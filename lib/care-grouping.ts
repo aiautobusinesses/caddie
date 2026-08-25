@@ -13,7 +13,7 @@
  * This is called at offer time; nothing is stored.
  */
 
-import { daysUntilDue, buildCareReason, isGenuinelyOverdue } from "@/lib/care"
+import { buildCareReason, isGenuinelyOverdue } from "@/lib/care"
 
 export type CarePlanRow = {
   id: string
@@ -161,5 +161,3 @@ function buildOverdueReason(anchor: CarePlanRow, today: string): string {
   return `hasn't been ${anchor.action.toLowerCase()}ed in ${days} day${days === 1 ? "" : "s"}`
 }
 
-/** Faster description of days until due (positive = future). */
-export { daysUntilDue }

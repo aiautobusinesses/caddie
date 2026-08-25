@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import type { CareGroupOffer } from "@/app/api/offer/route"
+import type { CareGroupOffer } from "@/lib/offer"
 
 type Props = {
   group: CareGroupOffer

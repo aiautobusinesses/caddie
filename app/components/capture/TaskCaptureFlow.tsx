@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { LifeWalkExtractedThing } from "@/lib/tasks"
 import { saveCapturedThings } from "@/lib/capture"
 import SwipeableTaskRow from "./SwipeableTaskRow"
@@ -14,6 +14,19 @@ type TaskCaptureFlowProps = {
   onClose?: () => void
 }
 
+// Normalise the vendor-prefixed SpeechRecognition constructor.
+// TypeScript's dom lib exposes SpeechRecognition but the constructor
+// isn't on `window` in all versions — use any to stay compatible.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySpeechRecognition = any
+
+function getSpeechRecognition(): AnySpeechRecognition | null {
+  if (typeof window === "undefined") return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
 export default function TaskCaptureFlow({
   variant,
   onSaved,
@@ -24,6 +37,48 @@ export default function TaskCaptureFlow({
   const [things, setThings] = useState<LifeWalkExtractedThing[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [listening, setListening] = useState(false)
+  // Lazy initialiser — runs once on mount (client only, never on server)
+  const [speechSupported] = useState(() => getSpeechRecognition() !== null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop()
+      return
+    }
+
+    const SR = getSpeechRecognition()
+    if (!SR) return
+
+    const recognition = new SR()
+    recognition.continuous = true
+    recognition.interimResults = false
+    recognition.lang = "en-GB"
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const appended = Array.from<any>(event.results)
+        .slice(event.resultIndex)
+        .map((r) => r[0].transcript)
+        .join(" ")
+      setTranscript((prev) => (prev ? `${prev} ${appended}` : appended))
+    }
+
+    recognition.onerror = () => {
+      setListening(false)
+    }
+
+    recognition.onend = () => {
+      setListening(false)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setListening(true)
+  }
 
   const isOnboarding = variant === "lifewalk"
 
@@ -94,13 +149,45 @@ export default function TaskCaptureFlow({
           ) : (
             <h1 className="text-xl font-semibold text-[#e8eaf0] mb-6">What needs doing?</h1>
           )}
-          <textarea
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            placeholder="Bleed the radiator, book the car in, trim the hedge..."
-            className="w-full bg-[#1e2128] border border-[#2c3040] rounded-3xl p-5 text-sm text-[#e8eaf0] placeholder-[#3a4155] resize-none focus:outline-none focus:border-[#5a6070] transition-colors"
-            rows={isOnboarding ? 8 : 6}
-          />
+          <div className="relative">
+            <textarea
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+              placeholder="Bleed the radiator, book the car in, trim the hedge..."
+              className="w-full bg-[#1e2128] border border-[#2c3040] rounded-3xl p-5 text-sm text-[#e8eaf0] placeholder-[#3a4155] resize-none focus:outline-none focus:border-[#5a6070] transition-colors"
+              rows={isOnboarding ? 8 : 6}
+            />
+            {speechSupported && (
+              <button
+                type="button"
+                onClick={toggleListening}
+                aria-label={listening ? "Stop recording" : "Start recording"}
+                className={`absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                  listening
+                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                    : "bg-[#262b35] text-[#5a6070] hover:text-[#e8eaf0] hover:bg-[#2c3040]"
+                }`}
+              >
+                {listening ? (
+                  // Stop icon
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                    <rect x="2" y="2" width="10" height="10" rx="1.5" />
+                  </svg>
+                ) : (
+                  // Mic icon
+                  <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="4" y="1" width="6" height="10" rx="3" />
+                    <path d="M1 9a6 6 0 0 0 12 0" />
+                    <line x1="7" y1="15" x2="7" y2="17" />
+                    <line x1="4" y1="17" x2="10" y2="17" />
+                  </svg>
+                )}
+              </button>
+            )}
+          </div>
+          {listening && (
+            <p className="text-xs text-red-400 mt-2 text-center">Listening — tap the mic to stop</p>
+          )}
           {error && <p className="text-sm text-red-400 mt-3 text-center">{error}</p>}
           <button
             type="button"
