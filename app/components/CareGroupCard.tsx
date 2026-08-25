@@ -60,31 +60,31 @@ export default function CareGroupCard({ group, onDone }: Props) {
 
   if (!expanded) {
     return (
-      <div className="flex flex-col flex-none bg-[#1e2128] border border-[#2c3040] rounded-[18px] overflow-hidden hover:border-[#e8eaf0] transition-colors">
+      <div className="flex flex-col flex-none bg-surface border border-border rounded-[18px] overflow-hidden hover:border-fg transition-colors">
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="text-left px-[22px] pt-5 pb-[18px] focus-visible:outline-2 focus-visible:outline-[#c2604a] focus-visible:outline-offset-[-2px]"
+          className="text-left px-[22px] pt-5 pb-[18px] focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-[-2px]"
         >
-          <div className="text-[23px] font-bold leading-[1.15] tracking-[-0.015em] text-[#e8eaf0] text-wrap-pretty">
+          <div className="text-2xl font-bold leading-[1.15] tracking-[-0.015em] text-fg text-pretty">
             {group.title}
           </div>
           {group.entity_names.length > 1 && (
-            <div className="text-[13px] text-[#5a6070] mt-1 leading-[1.4]">
+            <div className="text-sm text-muted mt-1 leading-[1.4]">
               {group.entity_names.join(", ")}
             </div>
           )}
           {group.reason && (
-            <div className="border-t border-[#2c3040] mt-[14px] pt-3 text-[13px] leading-[1.4] text-[#5a6070]">
+            <div className="border-t border-border mt-3.5 pt-3 text-sm leading-[1.4] text-muted">
               {group.reason}
             </div>
           )}
         </button>
-        <div className="border-t border-[#2c3040] px-[22px] py-[10px]">
+        <div className="border-t border-border px-[22px] py-2.5">
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            className="text-[12px] font-bold text-[#5a6070] hover:text-[#9aa0b0] transition-colors"
+            className="text-[12px] font-bold text-muted hover:text-subtle transition-colors"
           >
             Mark done →
           </button>
@@ -96,18 +96,18 @@ export default function CareGroupCard({ group, onDone }: Props) {
   // Expanded: checklist
   // Lead with what was done framing: show names as checkable items
   return (
-    <div className="flex flex-col bg-[#1e2128] border border-[#2c3040] rounded-[18px] overflow-hidden">
-      <div className="px-[22px] pt-5 pb-4 border-b border-[#2c3040]">
-        <div className="text-[20px] font-bold leading-[1.15] tracking-[-0.015em] text-[#e8eaf0]">
+    <div className="flex flex-col bg-surface border border-border rounded-[18px] overflow-hidden">
+      <div className="px-[22px] pt-5 pb-4 border-b border-border">
+        <div className="text-xl font-bold leading-[1.15] tracking-[-0.015em] text-fg">
           {group.title}
         </div>
         {group.reason && (
-          <div className="text-[13px] text-[#5a6070] mt-1">{group.reason}</div>
+          <div className="text-sm text-muted mt-1">{group.reason}</div>
         )}
       </div>
 
       {/* Checklist */}
-      <div className="px-[22px] py-3 flex flex-col gap-[2px]">
+      <div className="px-[22px] py-3 flex flex-col gap-0.5">
         {group.plan_ids.map((planId, i) => {
           const name = group.entity_names[i] ?? planId
           const checked = ticked[planId] ?? false
@@ -116,13 +116,13 @@ export default function CareGroupCard({ group, onDone }: Props) {
               key={planId}
               type="button"
               onClick={() => toggleTick(planId)}
-              className="flex items-center gap-3 py-[9px] text-left w-full group"
+              className="flex items-center gap-3 py-2.5 text-left w-full group"
             >
               <span
                 className={`flex-none w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
                   checked
-                    ? "bg-[#e8eaf0] border-[#e8eaf0]"
-                    : "border-[#3a4155] group-hover:border-[#5a6070]"
+                    ? "bg-fg border-fg"
+                    : "border-dim group-hover:border-muted"
                 }`}
               >
                 {checked && (
@@ -132,8 +132,8 @@ export default function CareGroupCard({ group, onDone }: Props) {
                 )}
               </span>
               <span
-                className={`text-[14.5px] leading-[1.35] transition-colors ${
-                  checked ? "text-[#9aa0b0] line-through decoration-[#3a4155]" : "text-[#e8eaf0]"
+                className={`text-base leading-[1.35] transition-colors ${
+                  checked ? "text-subtle line-through decoration-dim" : "text-fg"
                 }`}
               >
                 {name}
@@ -148,12 +148,12 @@ export default function CareGroupCard({ group, onDone }: Props) {
       )}
 
       {/* Footer: save + edit link */}
-      <div className="border-t border-[#2c3040] px-[22px] py-3 flex items-center justify-between gap-3">
+      <div className="border-t border-border px-[22px] py-3 flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={() => void handleReport()}
           disabled={saving}
-          className="bg-[#e8eaf0] text-[#16181c] rounded-[10px] px-4 py-[9px] text-[13px] font-bold hover:bg-white transition-colors disabled:opacity-30"
+          className="bg-fg text-bg rounded-[10px] px-4 py-2.5 text-sm font-bold hover:bg-white transition-colors disabled:opacity-30"
         >
           {saving ? "Saving…" : tickedCount > 0 ? "Done" : "None done"}
         </button>
@@ -161,14 +161,14 @@ export default function CareGroupCard({ group, onDone }: Props) {
           <button
             type="button"
             onClick={() => setExpanded(false)}
-            className="text-[12px] font-bold text-[#5a6070] hover:text-[#9aa0b0] transition-colors"
+            className="text-[12px] font-bold text-muted hover:text-subtle transition-colors"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => router.push(`/care-plans/${group.anchor_plan_id}/edit`)}
-            className="text-[12px] font-bold text-[#3a4155] hover:text-[#5a6070] transition-colors"
+            className="text-[12px] font-bold text-dim hover:text-muted transition-colors"
           >
             Edit plan
           </button>

@@ -131,7 +131,7 @@ export default function TaskCaptureFlow({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 rounded-full bg-[#262b35] hover:bg-[#2c3040] text-[#5a6070] text-sm flex items-center justify-center"
+                className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted text-sm flex items-center justify-center"
                 aria-label="Close"
               >
                 ×
@@ -140,21 +140,21 @@ export default function TaskCaptureFlow({
           )}
           {isOnboarding ? (
             <>
-              <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-2 text-center">Life walk</p>
-              <h1 className="text-2xl font-semibold text-[#e8eaf0] text-center mb-2">What&apos;s on your mind?</h1>
-              <p className="text-sm text-[#5a6070] text-center mb-8">
+              <p className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Life walk</p>
+              <h1 className="text-2xl font-semibold text-fg text-center mb-2">What&apos;s on your mind?</h1>
+              <p className="text-sm text-muted text-center mb-8">
                 Walk around your spaces and type everything you notice that needs doing. Don&apos;t filter — just narrate.
               </p>
             </>
           ) : (
-            <h1 className="text-xl font-semibold text-[#e8eaf0] mb-6">What needs doing?</h1>
+            <h1 className="text-xl font-semibold text-fg mb-6">What needs doing?</h1>
           )}
           <div className="relative">
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
               placeholder="Bleed the radiator, book the car in, trim the hedge..."
-              className="w-full bg-[#1e2128] border border-[#2c3040] rounded-3xl p-5 text-sm text-[#e8eaf0] placeholder-[#3a4155] resize-none focus:outline-none focus:border-[#5a6070] transition-colors"
+              className="w-full bg-surface border border-border rounded-3xl p-5 text-sm text-fg placeholder-dim resize-none focus:outline-none focus:border-muted transition-colors"
               rows={isOnboarding ? 8 : 6}
             />
             {speechSupported && (
@@ -165,7 +165,7 @@ export default function TaskCaptureFlow({
                 className={`absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
                   listening
                     ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                    : "bg-[#262b35] text-[#5a6070] hover:text-[#e8eaf0] hover:bg-[#2c3040]"
+                    : "bg-dim/50 text-muted hover:text-fg hover:bg-border"
                 }`}
               >
                 {listening ? (
@@ -193,7 +193,7 @@ export default function TaskCaptureFlow({
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!transcript.trim()}
-            className="w-full mt-4 bg-[#e8eaf0] text-[#16181c] rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full mt-4 bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             Let Caddie sort this out
           </button>
@@ -208,8 +208,8 @@ export default function TaskCaptureFlow({
         <div className="mb-6">
           <Spinner size={36} />
         </div>
-        <p className="text-2xl font-semibold text-[#e8eaf0] mb-2">Sorting it out…</p>
-        <p className="text-sm text-[#5a6070]">Caddie is working through what you said.</p>
+        <p className="text-2xl font-semibold text-fg mb-2">Sorting it out…</p>
+        <p className="text-sm text-muted">Caddie is working through what you said.</p>
       </div>
     )
   }
@@ -222,15 +222,15 @@ export default function TaskCaptureFlow({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[#262b35] hover:bg-[#2c3040] text-[#5a6070] text-sm flex items-center justify-center"
+              className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted text-sm flex items-center justify-center"
               aria-label="Close"
             >
               ×
             </button>
           </div>
         )}
-        <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-2 text-center">Here&apos;s what I found</p>
-        <h1 className="text-2xl font-semibold text-[#e8eaf0] text-center mb-6">
+        <p className="text-xs uppercase tracking-widest text-muted mb-2 text-center">Here&apos;s what I found</p>
+        <h1 className="text-2xl font-semibold text-fg text-center mb-6">
           {things.length} {things.length === 1 ? "thing" : "things"}
         </h1>
         <div className="flex flex-col gap-3 mb-8">
@@ -247,7 +247,7 @@ export default function TaskCaptureFlow({
           type="button"
           onClick={() => void handleSave()}
           disabled={saving}
-          className="w-full bg-[#e8eaf0] text-[#16181c] rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-full bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           {saving ? "Saving…" : `Save ${things.length} ${things.length === 1 ? "thing" : "things"}`}
         </button>

@@ -93,17 +93,17 @@ export default function CarePlanEditor({
   }
 
   return (
-    <div className="flex flex-col min-h-dvh bg-[#16181c]">
-      <div className="flex-none px-6 pt-6 pb-0 border-b-2 border-[#2c3040] flex items-center gap-4 pb-5">
+    <div className="flex flex-col min-h-dvh bg-bg">
+      <div className="flex-none px-6 pt-6 border-b-2 border-border flex items-center gap-4 pb-5">
         <button
           type="button"
           onClick={() => router.back()}
-          className="text-[#5a6070] hover:text-[#9aa0b0] transition-colors text-sm font-semibold"
+          className="text-muted hover:text-subtle transition-colors text-sm font-semibold"
           aria-label="Go back"
         >
           ← Back
         </button>
-        <h1 className="text-[20px] font-bold text-[#e8eaf0] leading-[1.1] tracking-[-0.015em] flex-1">
+        <h1 className="text-xl font-bold text-fg leading-[1.1] tracking-[-0.015em] flex-1">
           {entityName}
         </h1>
       </div>
@@ -111,7 +111,7 @@ export default function CarePlanEditor({
       <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6 max-w-sm mx-auto w-full">
 
         {source === "generated" && (
-          <div className="bg-[#1e2128] border border-[#2c3040] rounded-[14px] px-4 py-3 text-[12.5px] leading-[1.5] text-[#9aa0b0]">
+          <div className="bg-surface border border-border rounded-[14px] px-4 py-3 text-[12.5px] leading-[1.5] text-subtle">
             {note
               ? note
               : "This is a suggested starting plan — change it if you know better. Caddie will never overwrite your edits."}
@@ -120,36 +120,36 @@ export default function CarePlanEditor({
 
         {/* Action */}
         <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#5a6070]">
+          <label className="text-xs font-bold uppercase tracking-[0.1em] text-muted">
             Action
           </label>
           <input
             type="text"
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            className="bg-[#1e2128] border border-[#2c3040] rounded-[10px] px-4 py-3 text-[14px] text-[#e8eaf0] focus:outline-none focus:border-[#5a6070] transition-colors"
+            className="bg-surface border border-border rounded-[10px] px-4 py-3 text-base text-fg focus:outline-none focus:border-muted transition-colors"
           />
-          <p className="text-[11.5px] text-[#5a6070]">
+          <p className="text-[11.5px] text-muted">
             Used to group items by action — e.g. &ldquo;Water&rdquo;, &ldquo;Feed&rdquo;, &ldquo;Put out&rdquo;.
           </p>
         </div>
 
         {/* Intervals */}
         <div className="flex flex-col gap-3">
-          <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#5a6070]">
+          <label className="text-xs font-bold uppercase tracking-[0.1em] text-muted">
             Days between care — by month
           </label>
           <div className="grid grid-cols-3 gap-2">
             {MONTHS.map(({ label, month }) => (
               <div key={month} className="flex flex-col gap-1">
-                <span className="text-[10.5px] text-[#5a6070]">{label}</span>
+                <span className="text-[10.5px] text-muted">{label}</span>
                 <input
                   type="number"
                   min={1}
                   step={1}
                   value={intervals[String(month)] ?? 7}
                   onChange={(e) => setMonth(month, e.target.value)}
-                  className="bg-[#1e2128] border border-[#2c3040] rounded-[8px] px-2 py-[7px] text-[14px] text-[#e8eaf0] focus:outline-none focus:border-[#5a6070] transition-colors text-center w-full"
+                  className="bg-surface border border-border rounded-lg px-2 py-1.5 text-base text-fg focus:outline-none focus:border-muted transition-colors text-center w-full"
                 />
               </div>
             ))}
@@ -158,7 +158,7 @@ export default function CarePlanEditor({
 
         {/* Tolerance */}
         <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#5a6070]">
+          <label className="text-xs font-bold uppercase tracking-[0.1em] text-muted">
             Tolerance (days early without harm)
           </label>
           <input
@@ -167,16 +167,16 @@ export default function CarePlanEditor({
             step={1}
             value={toleranceDays}
             onChange={(e) => setToleranceDays(parseInt(e.target.value, 10) || 0)}
-            className="bg-[#1e2128] border border-[#2c3040] rounded-[10px] px-4 py-3 text-[14px] text-[#e8eaf0] focus:outline-none focus:border-[#5a6070] transition-colors"
+            className="bg-surface border border-border rounded-[10px] px-4 py-3 text-base text-fg focus:outline-none focus:border-muted transition-colors"
           />
-          <p className="text-[11.5px] text-[#5a6070]">
+          <p className="text-[11.5px] text-muted">
             Watering 2 days early is harmless — set 2. Bins on collection day — set 0.
           </p>
         </div>
 
         {/* Overdue */}
         <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#5a6070]">
+          <label className="text-xs font-bold uppercase tracking-[0.1em] text-muted">
             Overdue threshold (days past due before it genuinely matters)
           </label>
           <input
@@ -185,9 +185,9 @@ export default function CarePlanEditor({
             step={1}
             value={overdueDays}
             onChange={(e) => setOverdueDays(parseInt(e.target.value, 10) || 0)}
-            className="bg-[#1e2128] border border-[#2c3040] rounded-[10px] px-4 py-3 text-[14px] text-[#e8eaf0] focus:outline-none focus:border-[#5a6070] transition-colors"
+            className="bg-surface border border-border rounded-[10px] px-4 py-3 text-base text-fg focus:outline-none focus:border-muted transition-colors"
           />
-          <p className="text-[11.5px] text-[#5a6070]">
+          <p className="text-[11.5px] text-muted">
             After this many days past due, Caddie will say so plainly.
           </p>
         </div>
@@ -200,7 +200,7 @@ export default function CarePlanEditor({
           type="button"
           onClick={() => void handleSave()}
           disabled={saving || saved}
-          className="w-full bg-[#e8eaf0] text-[#16181c] rounded-[14px] px-5 py-[17px] text-[15px] font-bold hover:bg-white transition-colors disabled:opacity-30"
+          className="w-full bg-fg text-bg rounded-[14px] px-5 py-[17px] text-md font-bold hover:bg-white transition-colors disabled:opacity-30"
         >
           {saved ? "Saved" : saving ? "Saving…" : "Save changes"}
         </button>

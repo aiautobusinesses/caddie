@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Spinner from "@/app/components/Spinner"
 import type { InProgressThing } from "@/lib/offer"
 
@@ -9,16 +10,10 @@ type Props = {
   loadingBreakdown: boolean
   breakdownError: string | null
   actionError: string | null
-  editingName: boolean
-  editedName: string
-  confirmingAbandon: boolean
   justStarted: boolean
   onDone: (stillGoing: boolean) => void
   onBreakdown: () => void
-  onSetEditingName: (v: boolean) => void
-  onSetEditedName: (v: string) => void
-  onSaveName: () => void
-  onSetConfirmingAbandon: (v: boolean) => void
+  onSaveName: (newName: string) => void
   onAbandon: () => void
 }
 
@@ -28,22 +23,30 @@ export default function FocusScreen({
   loadingBreakdown,
   breakdownError,
   actionError,
-  editingName,
-  editedName,
-  confirmingAbandon,
   justStarted,
   onDone,
   onBreakdown,
-  onSetEditingName,
-  onSetEditedName,
   onSaveName,
-  onSetConfirmingAbandon,
   onAbandon,
 }: Props) {
+  const [editingName, setEditingName] = useState(false)
+  const [editedName, setEditedName] = useState("")
+  const [confirmingAbandon, setConfirmingAbandon] = useState(false)
+
+  function startEditing() {
+    setEditedName(inProgress.thing_name ?? "")
+    setEditingName(true)
+  }
+
+  function commitName() {
+    onSaveName(editedName)
+    setEditingName(false)
+  }
+
   return (
     <>
       <div className="flex-none px-6 pt-6 pb-0">
-        <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#5a6070]">
+        <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted">
           You&rsquo;re doing this
         </p>
       </div>
@@ -54,47 +57,44 @@ export default function FocusScreen({
             <input
               type="text"
               value={editedName}
-              onChange={(e) => onSetEditedName(e.target.value)}
+              onChange={(e) => setEditedName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") onSaveName()
-                if (e.key === "Escape") onSetEditingName(false)
+                if (e.key === "Enter") commitName()
+                if (e.key === "Escape") setEditingName(false)
               }}
               autoFocus
-              className="text-[32px] font-bold leading-[1.04] tracking-[-0.025em] text-[#e8eaf0] bg-transparent border-b-2 border-[#5a6070] focus:outline-none focus:border-[#e8eaf0] transition-colors w-full"
+              className="text-5xl font-bold leading-[1.04] tracking-[-0.025em] text-fg bg-transparent border-b-2 border-muted focus:outline-none focus:border-fg transition-colors w-full"
             />
             <div className="flex gap-3 mt-1">
-              <button type="button" onClick={onSaveName} className="text-[13px] font-bold text-[#e8eaf0] hover:text-white transition-colors">Save</button>
-              <button type="button" onClick={() => onSetEditingName(false)} className="text-[13px] font-bold text-[#5a6070] hover:text-[#9aa0b0] transition-colors">Cancel</button>
+              <button type="button" onClick={commitName} className="text-sm font-bold text-fg hover:text-white transition-colors">Save</button>
+              <button type="button" onClick={() => setEditingName(false)} className="text-sm font-bold text-muted hover:text-subtle transition-colors">Cancel</button>
             </div>
           </div>
         ) : (
           <button
             type="button"
-            onClick={() => {
-              onSetEditedName(inProgress.thing_name ?? "")
-              onSetEditingName(true)
-            }}
-            className="text-left text-[40px] font-bold leading-[1.02] tracking-[-0.03em] text-[#e8eaf0] text-wrap-pretty hover:text-white transition-colors"
+            onClick={startEditing}
+            className="text-left text-5xl font-bold leading-[1.02] tracking-[-0.03em] text-fg text-pretty hover:text-white transition-colors"
           >
             {inProgress.thing_name ?? ""}
           </button>
         )}
-        <p className="mt-[14px] text-[13px] text-[#5a6070]">
+        <p className="mt-3.5 text-sm text-muted">
           {justStarted ? "started just now" : "welcome back"}
         </p>
 
         {breakdown && (
-          <div className="mt-6 border-t-2 border-[#2c3040] pt-4">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#5a6070] mb-[10px]">
+          <div className="mt-6 border-t-2 border-border pt-4">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted mb-2.5">
               The step you&rsquo;re on
             </p>
-            <p className="text-[20px] font-bold leading-[1.2] tracking-[-0.015em] text-[#e8eaf0] text-wrap-pretty mb-4">
+            <p className="text-xl font-bold leading-[1.2] tracking-[-0.015em] text-fg text-pretty mb-4">
               {inProgress.step_name ?? ""}
             </p>
             <div className="flex flex-col">
               {breakdown.map((step, i) => (
-                <div key={i} className="flex gap-3 py-[9px] border-b border-[#2c3040] text-[14.5px] leading-[1.35] text-[#9aa0b0]">
-                  <span className="w-[7px] h-[7px] rounded-full bg-[#5a6070] flex-none mt-2" />
+                <div key={i} className="flex gap-3 py-2.5 border-b border-border text-base leading-[1.35] text-subtle">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted flex-none mt-2" />
                   <span>{step}</span>
                 </div>
               ))}
@@ -111,7 +111,7 @@ export default function FocusScreen({
             type="button"
             disabled={loadingBreakdown}
             onClick={onBreakdown}
-            className="text-left border border-[#2c3040] rounded-[14px] px-4 py-[13px] text-[13px] font-bold text-[#9aa0b0] hover:border-[#e8eaf0] hover:text-[#e8eaf0] transition-colors inline-flex items-center gap-2 disabled:opacity-40"
+            className="text-left border border-border rounded-[14px] px-4 py-3.5 text-sm font-bold text-subtle hover:border-fg hover:text-fg transition-colors inline-flex items-center gap-2 disabled:opacity-40"
           >
             {loadingBreakdown && <Spinner />}
             {loadingBreakdown ? "Thinking…" : "Break it into steps"}
@@ -121,41 +121,32 @@ export default function FocusScreen({
         <button
           type="button"
           onClick={() => onDone(false)}
-          className="text-left bg-[#e8eaf0] text-[#16181c] rounded-[14px] px-5 py-[17px] text-[15px] font-bold hover:bg-white transition-colors"
+          className="text-left bg-fg text-bg rounded-[14px] px-5 py-[17px] text-md font-bold hover:bg-white transition-colors"
         >
           Done
         </button>
         <button
           type="button"
           onClick={() => onDone(true)}
-          className="text-left border border-[#2c3040] rounded-[14px] px-5 py-[15px] text-[14px] font-bold text-[#9aa0b0] hover:border-[#e8eaf0] hover:text-[#e8eaf0] transition-colors"
+          className="text-left border border-border rounded-[14px] px-5 py-[15px] text-base font-bold text-subtle hover:border-fg hover:text-fg transition-colors"
         >
           Still going
         </button>
-        {!justStarted && (
-          <button
-            type="button"
-            onClick={() => onDone(true)}
-            className="text-left text-[13px] font-bold text-[#5a6070] hover:text-[#9aa0b0] transition-colors px-1 py-1"
-          >
-            Not now
-          </button>
-        )}
         {confirmingAbandon ? (
-          <div className="flex flex-col gap-2 mt-1 border-t border-[#2c3040] pt-3">
-            <p className="text-[12px] text-[#9aa0b0]">This can&rsquo;t be undone.</p>
+          <div className="flex flex-col gap-2 mt-1 border-t border-border pt-3">
+            <p className="text-[12px] text-subtle">This can&rsquo;t be undone.</p>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={onAbandon}
-                className="text-[13px] font-bold text-red-400 hover:text-red-300 transition-colors"
+                className="text-sm font-bold text-red-400 hover:text-red-300 transition-colors"
               >
                 Yes, let it go
               </button>
               <button
                 type="button"
-                onClick={() => onSetConfirmingAbandon(false)}
-                className="text-[13px] font-bold text-[#5a6070] hover:text-[#9aa0b0] transition-colors"
+                onClick={() => setConfirmingAbandon(false)}
+                className="text-sm font-bold text-muted hover:text-subtle transition-colors"
               >
                 Keep it
               </button>
@@ -164,8 +155,8 @@ export default function FocusScreen({
         ) : (
           <button
             type="button"
-            onClick={() => onSetConfirmingAbandon(true)}
-            className="text-left text-[12px] font-bold text-[#3a4155] hover:text-[#5a6070] transition-colors px-1 py-1"
+            onClick={() => setConfirmingAbandon(true)}
+            className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1"
           >
             Let this go
           </button>

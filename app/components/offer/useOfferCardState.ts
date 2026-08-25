@@ -19,9 +19,6 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
   const [peekBreakdown, setPeekBreakdown] = useState<Record<string, string[]>>({})
   const [peekLoading, setPeekLoading] = useState<Record<string, boolean>>({})
   const [thingComplete, setThingComplete] = useState<{ name: string } | null>(null)
-  const [editingName, setEditingName] = useState(false)
-  const [editedName, setEditedName] = useState("")
-  const [confirmingAbandon, setConfirmingAbandon] = useState(false)
   const [justStarted, setJustStarted] = useState(false)
 
   const refreshOffer = useCallback(async () => {
@@ -81,26 +78,14 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     setActionError(null)
     setBreakdown(null)
 
-    if (stillGoing) {
-      void refreshOffer()
-      fetch(`/api/things/${inProgress.thing_id}/done`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ still_going: true }),
-      }).catch((e) => {
-        setActionError(e instanceof Error ? e.message : "Something went wrong")
-      })
-      return
-    }
-
     try {
       const res = await fetch(`/api/things/${inProgress.thing_id}/done`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ still_going: false }),
+        body: JSON.stringify({ still_going: stillGoing }),
       })
       const data = await res.json()
-      if (data.thing_complete && data.thing_name) {
+      if (!stillGoing && data.thing_complete && data.thing_name) {
         setThingComplete({ name: data.thing_name as string })
         setTimeout(() => {
           setThingComplete(null)
@@ -131,24 +116,27 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     }
   }
 
-  async function handleSaveName() {
-    if (!inProgress || !editedName.trim()) return
-    const trimmed = editedName.trim()
+  async function handleSaveName(newName: string) {
+    if (!inProgress) return
+    const trimmed = newName.trim()
+    if (!trimmed) return
+    const previous = inProgress.thing_name
     setInProgress((prev) => (prev ? { ...prev, thing_name: trimmed } : prev))
-    setEditingName(false)
-    fetch(`/api/things/${inProgress.thing_id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: trimmed }),
-    }).catch(() => {
-      setInProgress((prev) => (prev ? { ...prev, thing_name: inProgress.thing_name } : prev))
+    try {
+      const res = await fetch(`/api/things/${inProgress.thing_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setInProgress((prev) => (prev ? { ...prev, thing_name: previous } : prev))
       setActionError("Couldn't save the name change")
-    })
+    }
   }
 
   async function handleAbandon() {
     if (!inProgress) return
-    setConfirmingAbandon(false)
     const thingId = inProgress.thing_id
     setInProgress(null)
     setScreen("offer")
@@ -162,6 +150,19 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     }
   }
 
+  async function handleSkipAll(items: OfferItem[]) {
+    await Promise.all(
+      items.map((item) =>
+        fetch(`/api/steps/${item.step_id}/event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event_type: "skipped" }),
+        })
+      )
+    )
+    void refreshOffer()
+  }
+
   async function handlePeek(thingId: string) {
     if (peekBreakdown[thingId] || peekLoading[thingId]) return
     setPeekLoading((prev) => ({ ...prev, [thingId]: true }))
@@ -170,7 +171,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed")
       setPeekBreakdown((prev) => ({ ...prev, [thingId]: (data.steps as string[]).slice(0, 2) }))
-    } catch {
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Something went wrong")
     } finally {
       setPeekLoading((prev) => ({ ...prev, [thingId]: false }))
     }
@@ -192,17 +194,12 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     peekLoading,
     thingComplete,
     setThingComplete,
-    editingName,
-    setEditingName,
-    editedName,
-    setEditedName,
-    confirmingAbandon,
-    setConfirmingAbandon,
     justStarted,
     refreshOffer,
     handleStart,
     handleDone,
     handleBreakdown,
+    handleSkipAll,
     handleSaveName,
     handleAbandon,
     handlePeek,

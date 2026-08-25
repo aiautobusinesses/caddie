@@ -39,13 +39,13 @@ export default function AuthPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-dvh px-6">
       <div className="w-full max-w-sm">
-        <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-2 text-center">
+        <p className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
           Caddie
         </p>
-        <h1 className="text-2xl font-semibold text-[#e8eaf0] text-center mb-2">
+        <h1 className="text-2xl font-semibold text-fg text-center mb-2">
           Sign in
         </h1>
-        <p className="text-sm text-[#5a6070] text-center mb-8">
+        <p className="text-sm text-muted text-center mb-8">
           We&apos;ll email you a magic link — no password needed.
         </p>
 
@@ -57,18 +57,18 @@ export default function AuthPage() {
             placeholder="you@example.com"
             autoComplete="email"
             required
-            className="w-full bg-[#1e2128] border border-[#2c3040] rounded-3xl px-5 py-4 text-sm text-[#e8eaf0] placeholder-[#3a4155] focus:outline-none focus:border-[#5a6070] transition-colors"
+            className="w-full bg-surface border border-border rounded-3xl px-5 py-4 text-sm text-fg placeholder-dim focus:outline-none focus:border-muted transition-colors"
           />
           {error && (
             <p className="text-sm text-red-400 text-center">{error}</p>
           )}
           {message && (
-            <p className="text-sm text-[#9aa0b0] text-center">{message}</p>
+            <p className="text-sm text-subtle text-center">{message}</p>
           )}
           <button
             type="submit"
             disabled={loading || !email.trim()}
-            className="w-full bg-[#e8eaf0] text-[#16181c] rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             {loading ? "Sending…" : "Send magic link"}
           </button>

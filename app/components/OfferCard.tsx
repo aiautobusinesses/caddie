@@ -10,8 +10,6 @@ import type { OfferCardProps } from "./offer/types"
 
 export default function OfferCard({ initialOffer, initialInProgress, initialCareGroup }: OfferCardProps) {
   const { openCapture } = useCapture()
-  const state = useOfferCardState({ initialOffer, initialInProgress, initialCareGroup })
-
   const {
     screen,
     setScreen,
@@ -28,21 +26,16 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     peekLoading,
     thingComplete,
     setThingComplete,
-    editingName,
-    setEditingName,
-    editedName,
-    setEditedName,
-    confirmingAbandon,
-    setConfirmingAbandon,
     justStarted,
     refreshOffer,
     handleStart,
     handleDone,
     handleBreakdown,
+    handleSkipAll,
     handleSaveName,
     handleAbandon,
     handlePeek,
-  } = state
+  } = useOfferCardState({ initialOffer, initialInProgress, initialCareGroup })
 
   if (thingComplete) {
     return (
@@ -53,7 +46,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
           void refreshOffer()
         }}
       >
-        <p className="text-[32px] font-bold leading-[1.04] tracking-[-0.025em] text-[#e8eaf0]">
+        <p className="text-4xl font-bold leading-[1.04] tracking-[-0.025em] text-fg">
           {thingComplete.name} done.
         </p>
       </div>
@@ -72,7 +65,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     return (
       <div className="flex flex-col items-center justify-center min-h-dvh px-6 text-center gap-4">
         <p className="text-sm text-red-400">{fetchError}</p>
-        <button type="button" onClick={() => void refreshOffer()} className="text-sm text-[#5a6070] underline">
+        <button type="button" onClick={() => void refreshOffer()} className="text-sm text-muted underline">
           Try again
         </button>
       </div>
@@ -80,7 +73,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
   }
 
   return (
-    <div className="flex flex-col min-h-dvh bg-[#16181c]">
+    <div className="flex flex-col min-h-dvh bg-bg">
       <div className="flex-1 flex flex-col min-h-0">
         {screen === "offer" && (
           <OfferScreen
@@ -90,16 +83,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
             peekBreakdown={peekBreakdown}
             peekLoading={peekLoading}
             onStart={(item) => void handleStart(item)}
-            onSkipAll={() => {
-              offer.forEach((item) => {
-                void fetch(`/api/steps/${item.step_id}/event`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ event_type: "skipped" }),
-                })
-              })
-              void refreshOffer()
-            }}
+            onSkipAll={() => void handleSkipAll(offer)}
             onPeek={(thingId) => void handlePeek(thingId)}
             onCapture={openCapture}
             onRefresh={() => void refreshOffer()}
@@ -113,16 +97,10 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
             loadingBreakdown={loadingBreakdown}
             breakdownError={breakdownError}
             actionError={actionError}
-            editingName={editingName}
-            editedName={editedName}
-            confirmingAbandon={confirmingAbandon}
             justStarted={justStarted}
             onDone={(stillGoing) => void handleDone(stillGoing)}
             onBreakdown={() => void handleBreakdown()}
-            onSetEditingName={setEditingName}
-            onSetEditedName={setEditedName}
-            onSaveName={() => void handleSaveName()}
-            onSetConfirmingAbandon={setConfirmingAbandon}
+            onSaveName={(newName) => void handleSaveName(newName)}
             onAbandon={() => void handleAbandon()}
           />
         )}
@@ -130,22 +108,20 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
         {screen === "settings" && <SettingsScreen />}
       </div>
 
-      <div className="flex-none flex border-t-2 border-[#2c3040] bg-[#16181c]">
+      <div className="flex-none flex border-t-2 border-border bg-bg">
         <button
           type="button"
           onClick={() => {
             if (screen === "settings") void refreshOffer()
           }}
-          className="flex-1 text-left px-5 py-[14px] pb-[22px] text-[11px] font-bold uppercase tracking-[0.08em] border-r-2 border-[#2c3040] transition-colors hover:bg-[#1e2128]"
-          style={{ color: screen !== "settings" ? "#e8eaf0" : "#5a6070" }}
+          className={`flex-1 text-left px-5 py-3.5 pb-[22px] text-xs font-bold uppercase tracking-[0.08em] border-r-2 border-border transition-colors hover:bg-surface ${screen !== "settings" ? "text-fg" : "text-muted"}`}
         >
           Now
         </button>
         <button
           type="button"
           onClick={() => setScreen("settings")}
-          className="flex-1 text-left px-5 py-[14px] pb-[22px] text-[11px] font-bold uppercase tracking-[0.08em] transition-colors hover:bg-[#1e2128]"
-          style={{ color: screen === "settings" ? "#e8eaf0" : "#5a6070" }}
+          className={`flex-1 text-left px-5 py-3.5 pb-[22px] text-xs font-bold uppercase tracking-[0.08em] transition-colors hover:bg-surface ${screen === "settings" ? "text-fg" : "text-muted"}`}
         >
           Settings
         </button>

@@ -11,7 +11,6 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary", "html"],
-      all: true,
       include: [
         "lib/api/session.ts",
         "lib/capture.ts",

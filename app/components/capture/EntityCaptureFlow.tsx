@@ -71,16 +71,16 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[#262b35] hover:bg-[#2c3040] text-[#5a6070] text-sm flex items-center justify-center"
+              className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted text-sm flex items-center justify-center"
               aria-label="Close"
             >
               ×
             </button>
           </div>
-          <h1 className="text-xl font-semibold text-[#e8eaf0] mb-2">
+          <h1 className="text-xl font-semibold text-fg mb-2">
             What needs regular care?
           </h1>
-          <p className="text-sm text-[#5a6070] mb-6">
+          <p className="text-sm text-muted mb-6">
             A plant, a bin, an appliance — say what it is and where it lives.
           </p>
           <input
@@ -90,14 +90,14 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
             onKeyDown={(e) => { if (e.key === "Enter") void handleSubmit() }}
             placeholder="Fiddle-leaf fig in the front room"
             autoFocus
-            className="w-full bg-[#1e2128] border border-[#2c3040] rounded-2xl px-5 py-4 text-sm text-[#e8eaf0] placeholder-[#3a4155] focus:outline-none focus:border-[#5a6070] transition-colors"
+            className="w-full bg-surface border border-border rounded-2xl px-5 py-4 text-sm text-fg placeholder-dim focus:outline-none focus:border-muted transition-colors"
           />
           {error && <p className="text-sm text-red-400 mt-3">{error}</p>}
           <button
             type="button"
             onClick={() => void handleSubmit()}
             disabled={!sentence.trim()}
-            className="w-full mt-4 bg-[#e8eaf0] text-[#16181c] rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full mt-4 bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             Set up a care plan
           </button>
@@ -110,9 +110,9 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
     return (
       <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
         <div className="mb-4">
-          <div className="w-6 h-6 border-2 border-[#5a6070] border-t-[#e8eaf0] rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-muted border-t-fg rounded-full animate-spin" />
         </div>
-        <p className="text-[15px] font-semibold text-[#e8eaf0]">Working it out…</p>
+        <p className="text-md font-semibold text-fg">Working it out…</p>
       </div>
     )
   }
@@ -129,38 +129,38 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#262b35] hover:bg-[#2c3040] text-[#5a6070] text-sm flex items-center justify-center"
+            className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted text-sm flex items-center justify-center"
             aria-label="Close"
           >
             ×
           </button>
         </div>
-        <p className="text-xs uppercase tracking-widest text-[#5a6070] mb-2">Care plan</p>
-        <h1 className="text-[22px] font-bold text-[#e8eaf0] mb-1 leading-[1.1] tracking-[-0.015em]">
+        <p className="text-xs uppercase tracking-widest text-muted mb-2">Care plan</p>
+        <h1 className="text-[22px] font-bold text-fg mb-1 leading-[1.1] tracking-[-0.015em]">
           {seeded.entity_name}
         </h1>
-        <p className="text-[13px] text-[#5a6070] mb-5">
+        <p className="text-sm text-muted mb-5">
           {seeded.action} plan — change it from the offer card if it&apos;s wrong.
         </p>
 
         {seeded.note && (
-          <div className="bg-[#1e2128] border border-[#2c3040] rounded-[12px] px-4 py-3 text-[12.5px] text-[#9aa0b0] mb-5 leading-[1.5]">
+          <div className="bg-surface border border-border rounded-[12px] px-4 py-3 text-[12.5px] text-subtle mb-5 leading-[1.5]">
             {seeded.note}
           </div>
         )}
 
         {/* Intervals summary */}
-        <div className="bg-[#1e2128] border border-[#2c3040] rounded-[14px] px-4 py-4 mb-5">
-          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-[#5a6070] mb-3">
+        <div className="bg-surface border border-border rounded-[14px] px-4 py-4 mb-5">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted mb-3">
             {seeded.action} every…
           </p>
           <div className="grid grid-cols-4 gap-x-3 gap-y-2">
             {MONTHS.map((label, i) => {
               const days = intervals[String(i + 1)]
               return (
-                <div key={label} className="flex flex-col gap-[2px]">
-                  <span className="text-[10px] text-[#5a6070]">{label}</span>
-                  <span className="text-[14px] font-bold text-[#e8eaf0]">{days}d</span>
+                <div key={label} className="flex flex-col gap-0.5">
+                  <span className="text-2xs text-muted">{label}</span>
+                  <span className="text-base font-bold text-fg">{days}d</span>
                 </div>
               )
             })}
@@ -170,11 +170,11 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
         <button
           type="button"
           onClick={handleConfirm}
-          className="w-full bg-[#e8eaf0] text-[#16181c] rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors"
+          className="w-full bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors"
         >
           Looks right
         </button>
-        <p className="text-center text-[12px] text-[#5a6070] mt-3">
+        <p className="text-center text-[12px] text-muted mt-3">
           You can adjust the plan from the offer card at any time.
         </p>
       </div>

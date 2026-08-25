@@ -40,7 +40,7 @@ class MockCustomEvent<T = unknown> extends Event {
   }
 }
 
-globalThis.CustomEvent = MockCustomEvent as typeof CustomEvent
+globalThis.CustomEvent = MockCustomEvent as unknown as typeof CustomEvent
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
