@@ -8,6 +8,7 @@ export type OfferItem = {
   step_id: string
   step_name: string
   band: "short" | "sitting" | "run"
+  needs_know_how: boolean
   reason: string | null
 }
 
@@ -36,6 +37,7 @@ export type OfferStepRow = {
   band: "short" | "sitting" | "run"
   mode: "thinking" | "doing"
   shape: "clean" | "bleeds"
+  needs_know_how: boolean
   recurrence_rule: unknown
   next_due: string | null
   last_done_at: string | null
@@ -197,6 +199,7 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
       step_id: liveStep?.id ?? thing.id,
       step_name: liveStep?.name ?? `Next thing on ${thing.name}`,
       band: liveStep?.band ?? "sitting",
+      needs_know_how: liveStep?.needs_know_how ?? false,
       reason: buildReason(thing, liveStep, today),
     }
   })

@@ -101,6 +101,8 @@ create table steps (
   ends_cleanly      bool not null default true,
   estimated_minutes int,
 
+  needs_know_how    bool not null default false,
+
   recurrence_rule   jsonb,
   next_due          date,
   last_done_at      timestamptz,

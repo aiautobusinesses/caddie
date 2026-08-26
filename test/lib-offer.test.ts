@@ -18,6 +18,7 @@ function makeThing(overrides: Partial<OfferThingRow> = {}): OfferThingRow {
         band: "sitting",
         mode: "doing",
         shape: "clean",
+        needs_know_how: false,
         recurrence_rule: null,
         next_due: null,
         last_done_at: null,
@@ -89,7 +90,7 @@ describe("computeOffer", () => {
     // live_step_id null and steps.length > 0 → not available
     const thing = makeThing({
       live_step_id: null,
-      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer).toHaveLength(0)
@@ -110,7 +111,7 @@ describe("computeOffer", () => {
       notify_window: 30,
       steps: [{
         id: "s1", name: "Book MOT", band: "short", mode: "thinking", shape: "clean",
-        recurrence_rule: null, next_due: "2024-02-05", last_done_at: null, step_order: 0, done: false,
+        needs_know_how: false, recurrence_rule: null, next_due: "2024-02-05", last_done_at: null, step_order: 0, done: false,
       }],
     })
     const result = computeOffer({ ...baseInput, today: "2024-02-01", things: [thing] })
@@ -118,26 +119,26 @@ describe("computeOffer", () => {
   })
 
   it("builds reason: due today for obligation", () => {
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }] })
+    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }] })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due today")
   })
 
   it("builds reason: due tomorrow for obligation", () => {
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-02", last_done_at: null, step_order: 0, done: false }] })
+    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-02", last_done_at: null, step_order: 0, done: false }] })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due tomorrow")
   })
 
   it("builds reason: overdue for obligation", () => {
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-01-31", last_done_at: null, step_order: 0, done: false }] })
+    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-01-31", last_done_at: null, step_order: 0, done: false }] })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("1 day overdue")
   })
 
   it("builds reason: overdue plural for obligation (lib/offer.ts:81 — Math.abs(days)===1 false)", () => {
     // Math.abs(days) !== 1 → "s" suffix. 3 days overdue.
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-01-29", last_done_at: null, step_order: 0, done: false }] })
+    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-01-29", last_done_at: null, step_order: 0, done: false }] })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("3 days overdue")
   })
@@ -147,7 +148,7 @@ describe("computeOffer", () => {
     const thing = makeThing({
       steps: [{
         id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        recurrence_rule: { type: "invalid" }, // invalid → parseRecurrenceRule returns null
+        needs_know_how: false, recurrence_rule: { type: "invalid" }, // invalid → parseRecurrenceRule returns null
         next_due: null, last_done_at: "2024-01-28", step_order: 0, done: false,
       }],
     })
@@ -160,7 +161,7 @@ describe("computeOffer", () => {
     const thing = makeThing({
       steps: [{
         id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
+        needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
         next_due: null, last_done_at: "2024-01-29", step_order: 0, done: false,
       }],
     })
@@ -172,7 +173,7 @@ describe("computeOffer", () => {
     const thing = makeThing({
       steps: [{
         id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
+        needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
         next_due: null, last_done_at: "2024-01-31", step_order: 0, done: false,
       }],
     })
@@ -182,7 +183,7 @@ describe("computeOffer", () => {
 
   it("builds reason: due now for next_due today (project with next_due)", () => {
     const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due now")
@@ -190,7 +191,7 @@ describe("computeOffer", () => {
 
   it("builds reason: due tomorrow for project", () => {
     const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-02", last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-02", last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due tomorrow")
@@ -198,7 +199,7 @@ describe("computeOffer", () => {
 
   it("builds reason: due in N days for project", () => {
     const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-05", last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-05", last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due in 4 days")
@@ -206,7 +207,7 @@ describe("computeOffer", () => {
 
   it("builds reason: quick one for short band, no due", () => {
     const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("quick one")
@@ -214,7 +215,7 @@ describe("computeOffer", () => {
 
   it("returns null reason when no condition matches", () => {
     const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBeNull()
@@ -225,7 +226,7 @@ describe("computeOffer", () => {
     const thing = makeThing({
       steps: [{
         id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
+        needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
         next_due: null, last_done_at: "2024-02-01", step_order: 0, done: false,
       }],
     })
@@ -237,7 +238,7 @@ describe("computeOffer", () => {
   it("project with next_due > 7 days away returns null reason (lib/offer.ts:101)", () => {
     // days <= 7 false branch: next_due is 10 days away
     const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-11", last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-11", last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, today: "2024-02-01", things: [thing] })
     // 10 days away: days > 7, not short band → null
@@ -250,14 +251,14 @@ describe("computeOffer", () => {
       id: "t1",
       live_step_id: "missing-id",
       steps: [
-        { id: "s1", name: "S1", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false },
-        { id: "s2", name: "S2", band: "run", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 1, done: false },
-        { id: "s3", name: "S3", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 2, done: false },
-        { id: "s4", name: "S4", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 3, done: false },
+        { id: "s1", name: "S1", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false },
+        { id: "s2", name: "S2", band: "run", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 1, done: false },
+        { id: "s3", name: "S3", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 2, done: false },
+        { id: "s4", name: "S4", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 3, done: false },
       ],
     })
     // More than 3 items so pickWithSpread runs, and getBand is called for this thing
-    const things = [thing, makeThing({ id: "t2", live_step_id: "s2x", steps: [{ id: "s2x", name: "S", band: "run", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }), makeThing({ id: "t3", live_step_id: "s3x", steps: [{ id: "s3x", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }), makeThing({ id: "t4", live_step_id: "s4x", steps: [{ id: "s4x", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] })]
+    const things = [thing, makeThing({ id: "t2", live_step_id: "s2x", steps: [{ id: "s2x", name: "S", band: "run", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }), makeThing({ id: "t3", live_step_id: "s3x", steps: [{ id: "s3x", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }), makeThing({ id: "t4", live_step_id: "s4x", steps: [{ id: "s4x", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] })]
     const result = computeOffer({ ...baseInput, things })
     expect(result.offer.length).toBeLessThanOrEqual(3)
   })
@@ -274,7 +275,7 @@ describe("computeOffer", () => {
     const thing = makeThing({
       class: "obligation",
       notify_window: 5,
-      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-21", last_done_at: null, step_order: 0, done: false }],
+      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-21", last_done_at: null, step_order: 0, done: false }],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer).toHaveLength(0)
@@ -286,7 +287,7 @@ describe("computeOffer", () => {
     const things = ["t1","t2","t3","t4"].map((id) => makeThing({
       id, live_step_id: `s${id}`,
       steps: [{ id: `s${id}`, name: "S", band: "sitting" as const, mode: "doing" as const,
-        shape: "clean" as const, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
+        shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
     }))
     const result = computeOffer({ ...baseInput, things })
     expect(result.offer).toHaveLength(3)
@@ -294,10 +295,10 @@ describe("computeOffer", () => {
 
   it("spreads across bands when more than 3 projects", () => {
     const things = [
-      makeThing({ id: "t1", steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-      makeThing({ id: "t2", live_step_id: "s2", steps: [{ id: "s2", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-      makeThing({ id: "t3", live_step_id: "s3", steps: [{ id: "s3", name: "S", band: "run", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-      makeThing({ id: "t4", live_step_id: "s4", steps: [{ id: "s4", name: "S", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
+      makeThing({ id: "t1", steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
+      makeThing({ id: "t2", live_step_id: "s2", steps: [{ id: "s2", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
+      makeThing({ id: "t3", live_step_id: "s3", steps: [{ id: "s3", name: "S", band: "run", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
+      makeThing({ id: "t4", live_step_id: "s4", steps: [{ id: "s4", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
     ]
     const result = computeOffer({ ...baseInput, things })
     expect(result.offer.length).toBeLessThanOrEqual(3)
@@ -314,7 +315,7 @@ describe("computeOffer", () => {
 
   it("care group not shown when obligation present (obligation takes reserved slot)", () => {
     const plan = makePlan()
-    const obligation = makeThing({ id: "to", class: "obligation", notify_window: null, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }] })
+    const obligation = makeThing({ id: "to", class: "obligation", notify_window: null, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }] })
     const result = computeOffer({ ...baseInput, things: [obligation], carePlans: [plan] })
     expect(result.careGroup).toBeNull()
   })

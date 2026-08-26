@@ -27,7 +27,7 @@ export async function loadOfferData(
       .select(`
         id, name, class, notify_window, live_step_id, started_at,
         steps!steps_thing_id_fkey (
-          id, name, band, mode, shape, recurrence_rule,
+          id, name, band, mode, shape, needs_know_how, recurrence_rule,
           next_due, last_done_at, step_order, done
         )
       `)

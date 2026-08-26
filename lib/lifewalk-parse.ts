@@ -73,6 +73,7 @@ function normalizeStep(raw: unknown): LifeWalkExtractedStep | null {
     band: normalizeBand(item.band),
     mode: normalizeMode(item.mode),
     shape: normalizeShape(item.shape),
+    needs_know_how: item.needs_know_how === true,
     recurrence_rule,
     next_due,
   }

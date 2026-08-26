@@ -94,6 +94,7 @@ export type Database = {
           band: Database["public"]["Enums"]["step_band"]
           mode: Database["public"]["Enums"]["step_mode"]
           shape: Database["public"]["Enums"]["step_shape"]
+          needs_know_how: boolean
           recurrence_rule: Json | null
           next_due: string | null
           last_done_at: string | null
@@ -111,6 +112,7 @@ export type Database = {
           band?: Database["public"]["Enums"]["step_band"]
           mode?: Database["public"]["Enums"]["step_mode"]
           shape?: Database["public"]["Enums"]["step_shape"]
+          needs_know_how?: boolean
           recurrence_rule?: Json | null
           next_due?: string | null
           last_done_at?: string | null
@@ -128,6 +130,7 @@ export type Database = {
           band?: Database["public"]["Enums"]["step_band"]
           mode?: Database["public"]["Enums"]["step_mode"]
           shape?: Database["public"]["Enums"]["step_shape"]
+          needs_know_how?: boolean
           recurrence_rule?: Json | null
           next_due?: string | null
           last_done_at?: string | null

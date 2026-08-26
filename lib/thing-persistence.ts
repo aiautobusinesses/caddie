@@ -51,6 +51,7 @@ export async function persistThings(
       band: step.band ?? "sitting",
       mode: step.mode ?? "doing",
       shape: step.shape ?? "clean",
+      needs_know_how: step.needs_know_how ?? false,
       recurrence_rule: step.recurrence_rule
         ? (parseRecurrenceRule(step.recurrence_rule) as Json)
         : null,

@@ -238,7 +238,7 @@ describe("capture helpers", () => {
 
   it("saves captured things and surfaces server errors", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 201 }))
-    await expect(saveCapturedThings([{ name: "Thing", class: "project", notify_window: null, steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null }] }])).resolves.toBeUndefined()
+    await expect(saveCapturedThings([{ name: "Thing", class: "project", notify_window: null, steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null }] }])).resolves.toBeUndefined()
 
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "Bad save" }), { status: 500, headers: { "Content-Type": "application/json" } }),
@@ -334,7 +334,7 @@ describe("lifewalk parser", () => {
       'prefix {"things":[{"name":" Another ","class":"other","notify_window":2,"steps":[{"name":" Step ","band":"bad","mode":"bad","shape":"bad","recurrence_rule":{"type":"bad"},"next_due":"bad"}]}]} suffix',
     )
     expect(wrapped[0]).toMatchObject({ name: "Another", class: "project", notify_window: 2 })
-    expect(wrapped[0].steps[0]).toMatchObject({ name: "Step", band: "sitting", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null })
+    expect(wrapped[0].steps[0]).toMatchObject({ name: "Step", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null })
   })
 
   it("throws on invalid payloads", () => {

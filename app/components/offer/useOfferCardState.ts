@@ -10,14 +10,10 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
   const [offer, setOffer] = useState<OfferItem[]>(initialOffer)
   const [careGroup, setCareGroup] = useState<CareGroupOffer | null>(initialCareGroup)
   const [inProgress, setInProgress] = useState<InProgressThing | null>(initialInProgress)
-  const [breakdown, setBreakdown] = useState<string[] | null>(null)
+  const [pendingItem, setPendingItem] = useState<OfferItem | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [loadingBreakdown, setLoadingBreakdown] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [breakdownError, setBreakdownError] = useState<string | null>(null)
-  const [peekBreakdown, setPeekBreakdown] = useState<Record<string, string[]>>({})
-  const [peekLoading, setPeekLoading] = useState<Record<string, boolean>>({})
   const [thingComplete, setThingComplete] = useState<{ name: string } | null>(null)
   const [justStarted, setJustStarted] = useState(false)
 
@@ -30,7 +26,6 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       const data = await res.json()
       if (data.in_progress) {
         setInProgress(data.in_progress)
-        setBreakdown(null)
         setCareGroup(null)
         setJustStarted(false)
         setScreen("focus")
@@ -53,14 +48,13 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     return () => window.removeEventListener(TASKS_UPDATED_EVENT, handler)
   }, [refreshOffer])
 
-  async function handleStart(item: OfferItem) {
+  async function commitStart(item: OfferItem) {
     setInProgress({
       thing_id: item.thing_id,
       thing_name: item.thing_name,
       step_name: item.step_name,
       started_at: new Date().toISOString(),
     })
-    setBreakdown(null)
     setActionError(null)
     setJustStarted(true)
     setScreen("focus")
@@ -73,10 +67,40 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     }
   }
 
+  async function handleStart(item: OfferItem) {
+    if (item.needs_know_how) {
+      setPendingItem(item)
+      setScreen("familiarity")
+    } else {
+      await commitStart(item)
+    }
+  }
+
+  async function handleFamiliarityYes() {
+    if (!pendingItem) return
+    const item = pendingItem
+    setPendingItem(null)
+    await commitStart(item)
+  }
+
+  async function handleFamiliarityNo() {
+    if (!pendingItem) return
+    const item = pendingItem
+    setPendingItem(null)
+
+    // Prepend a lookup step via the API, then proceed to start the thing.
+    // The API handles inserting the new step and advancing live_step_id.
+    try {
+      await fetch(`/api/things/${item.thing_id}/prepend-lookup`, { method: "POST" })
+    } catch {
+      // Non-fatal: still start, just without the prepended step
+    }
+    await commitStart({ ...item, step_name: `Look up how to: ${item.step_name}`, needs_know_how: false })
+  }
+
   async function handleDone(stillGoing: boolean) {
     if (!inProgress) return
     setActionError(null)
-    setBreakdown(null)
 
     try {
       const res = await fetch(`/api/things/${inProgress.thing_id}/done`, {
@@ -97,22 +121,6 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Something went wrong")
       void refreshOffer()
-    }
-  }
-
-  async function handleBreakdown() {
-    if (!inProgress) return
-    setLoadingBreakdown(true)
-    setBreakdownError(null)
-    try {
-      const res = await fetch(`/api/things/${inProgress.thing_id}/breakdown`, { method: "POST" })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Failed to get breakdown")
-      setBreakdown(data.steps)
-    } catch (e) {
-      setBreakdownError(e instanceof Error ? e.message : "Something went wrong")
-    } finally {
-      setLoadingBreakdown(false)
     }
   }
 
@@ -163,45 +171,26 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     void refreshOffer()
   }
 
-  async function handlePeek(thingId: string) {
-    if (peekBreakdown[thingId] || peekLoading[thingId]) return
-    setPeekLoading((prev) => ({ ...prev, [thingId]: true }))
-    try {
-      const res = await fetch(`/api/things/${thingId}/breakdown`, { method: "POST" })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? "Failed")
-      setPeekBreakdown((prev) => ({ ...prev, [thingId]: (data.steps as string[]).slice(0, 2) }))
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Something went wrong")
-    } finally {
-      setPeekLoading((prev) => ({ ...prev, [thingId]: false }))
-    }
-  }
-
   return {
     screen,
     setScreen,
     offer,
     careGroup,
     inProgress,
-    breakdown,
+    pendingItem,
     refreshing,
-    loadingBreakdown,
     fetchError,
     actionError,
-    breakdownError,
-    peekBreakdown,
-    peekLoading,
     thingComplete,
     setThingComplete,
     justStarted,
     refreshOffer,
     handleStart,
+    handleFamiliarityYes,
+    handleFamiliarityNo,
     handleDone,
-    handleBreakdown,
     handleSkipAll,
     handleSaveName,
     handleAbandon,
-    handlePeek,
   }
 }

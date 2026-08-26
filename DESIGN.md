@@ -89,10 +89,10 @@ You arrive wanting something to do; Caddie answers.
 - Reason attached, always true. **Specific when Caddie knows, generic when it doesn't** ("next thing on the bath panel"). Never invents a fact to justify an offer.
 - Buying is a step like any other, not a blocker.
 
-The shape spread is a consequence of picking across varied things, not a filter. A step is already a decomposed unit — "order the bath panel" is inherently short, "sand the wall" is a proper run. Claude sets `estimated_minutes` on each step at extraction time; the offer uses this to prefer variety across the three slots without ever asking the user. No separate shape field is needed.
+The shape spread is a consequence of picking across varied things, not a filter. A step is already a decomposed unit — "order the bath panel" is inherently short, "sand the wall" is a proper run. Claude assigns `band` (short / sitting / run) on each step at extraction time; the offer uses this to prefer variety across the three slots without ever asking the user.
 
 ### Accept
-One question, only when the answer changes what Caddie would offer ("got the paint?"). A "no" never blocks — it moves the live step to buying the paint.
+One question, only when the answer changes what Caddie would offer. Two cases: **materials** ("got the paint?") and **familiarity** ("know how to prep walls?"). A "no" to either never blocks — it either moves the live step to buying the material, or prepends a short lookup step to the chain. The correction is persisted; the question fires at most once per step per user.
 
 ### Stop
 A moment before you stop where you say where you got to, plus a photo where it makes sense. The interruption lag is what makes returning cheap.
@@ -128,17 +128,16 @@ Things done, no percentages, no penalty for gaps. Possibly a display in the hous
 
 ## UI decisions
 
-### Step name vs thing name on the offer card
-The offer card shows the **thing name** ("Bath panel"), not the live step name ("Order a bath panel"). The step name is stored and used internally for sequencing, but surfacing it on the offer card asks the user to validate whether it's correct before they've started. That's friction at the worst moment. The thing name is shown; the step is implied. If the user is uncertain what to do first, "Break it into steps" reveals the current step without making it the default view.
+### Step name on the offer card
+The offer card shows the **thing name** as the headline ("Bath panel") and the **live step name** as a secondary line beneath it ("Order the bath panel"). The thing name gives context; the step name tells you what to actually do. Both are visible by default — the step was already decomposed at capture, so there is no reason to hide it.
+
+The earlier design hid the step name to avoid friction at the moment of starting. That was the right instinct, but the real source of friction was a step that might be wrong for this user (assuming knowledge they don't have). The accept-question handles that problem at a better moment — after commitment, not before.
 
 ### "What do you fancy?" not "Pick something to start"
 The offer is not a menu. Framing it as a pick recreates the decision paralysis Caddie is meant to dissolve. The heading is casual and low-pressure — Caddie has already done the selecting, the user just decides whether to start.
 
-### "You're doing this" not "In progress"
-Status labels narrate state. "In progress" describes what the system knows. "You're doing this" addresses the person doing it — more grounding, less administrative.
-
-### "Break it into steps" not "Not sure where to start?"
-The original copy second-guessed the user immediately after they'd committed to starting something. The replacement is neutral and descriptive.
+### Focus screen: step name as headline, thing name as label
+Once the user has committed to starting, the thing name ("Bath panel") moves to a small label at the top and the live step name ("Order the bath panel") becomes the large headline. At this point the relevant question is not *what thing am I doing* but *what am I doing now*.
 
 ### FAB position: bottom-right
 The capture button sits at `bottom-6 right-6`. Top-right conflicts with iOS browser back-gesture zone and system UI in standalone PWA mode. Bottom-right is the standard FAB position and stays clear of both.
@@ -160,7 +159,7 @@ A **small API with several clients**, not a web app with features. Voice forces 
 
 - Next.js PWA on Vercel — installable, so laptop and Android are one build
 - Supabase for data, auth, RLS
-- Server-side LLM for extraction, chain breakdown, sentence routing
+- Server-side LLM for extraction and sentence routing
 - Cron + edge function for obligation notifications only
 - Offline capture queued and synced — cheap now, painful retrofitted
 - Stable API contract before clients multiply
@@ -174,16 +173,12 @@ A **small API with several clients**, not a web app with features. Voice forces 
 Two tables, not one self-referencing table — because the fields barely intersect and half the columns would be null.
 
 - **`things`** — name, class (obligation | project), `live_step_id` (FK → steps.id, updated on each step completion), notify window (obligations only, inferred, nudgeable)
-- **`steps`** — thing_id, name, order, done, ends-cleanly-or-bleeds, estimated_minutes (set by Claude at extraction, never asked of the user), photo
+- **`steps`** — thing_id, name, order, done, `band` (short / sitting / run), `mode` (thinking / doing), `shape` (clean / bleeds), `needs_know_how` (flags steps requiring domain knowledge — used by the accept-question), recurrence rule, next due date
 - **`step_events`** — step_id, user_id, event_type, metadata
 
 `live_step_id` is a stored FK rather than a derived query. The offer needs to fetch things and their live step title together in one join; a derived approach would require a lateral subquery per thing. The two-write cost per completion (mark step done + update `live_step_id`) is negligible and matches the existing event route pattern.
 
 Depth beyond one level isn't wanted: the whole design is one live step at a time.
-
-### Migration
-
-The existing `tasks` and `task_events` tables will be dropped. There is no meaningful data in the current database. Users do a fresh Life Walk after migration. `push_subscriptions` and `profiles` survive unchanged.
 
 ---
 
@@ -202,7 +197,7 @@ The Life Walk extraction must now output a nested structure (thing + ordered ste
 
 **Multi-step project**
 
-One-pass produced 6 steps in correct order including a "Allow treated wall to dry completely" waiting step with `estimated_minutes: null` and `ends_cleanly: true`. Two-pass produced 5 steps — collapsed the "measure up" and "order" into one ("Order replacement bath panel"), and marked the mould treatment as `ends_cleanly: true` where one-pass correctly flagged it `false`. One-pass was more faithful to the narration.
+One-pass produced 6 steps in correct order including a "Allow treated wall to dry completely" waiting step with `shape: bleeds`. Two-pass produced 5 steps — collapsed the "measure up" and "order" into one ("Order replacement bath panel"), and marked the mould treatment as `shape: clean` where one-pass correctly flagged it `bleeds`. One-pass was more faithful to the narration.
 
 **Single-step obligation**
 
@@ -210,7 +205,7 @@ Both produced a single step. One-pass correctly set `next_due` on the step (`202
 
 **Recurring maintenance**
 
-Identical output. Both: one step, `recurrence_rule: { type: "seasonal", summerDays: 3, winterDays: 14, anchor: "completion" }`, correct. Two-pass estimated 2 min vs one-pass 5 min — negligible difference.
+Identical output. Both: one step, `recurrence_rule: { type: "seasonal", summerDays: 3, winterDays: 14, anchor: "completion" }`, correct.
 
 **Ambiguous**
 
@@ -219,31 +214,6 @@ One-pass: 3 steps (sort into piles / remove donations+discards / organise). Two-
 ### Decision
 
 **Use one-pass.** It matched or outperformed two-pass on all four cases. The two failure modes observed were both in two-pass: a malformed recurrence rule on the obligation case, and spurious step invention on the ambiguous case. One-pass is also simpler, faster, and cheaper.
-
----
-
-## From the existing repo
-
-**Keep:** the Next.js PWA shell, manifest, service worker, icons. Supabase auth, RLS, profiles. Life Walk end to end (record → transcribe → extract → review → save). The capture flow and API routes. Push subscription plumbing and the notify edge function — narrower job, but it survives.
-
-**Rewrite:** schema (flat → chained). Extraction prompt (flat tasks → ordered steps). `lib/lifewalk-parse.ts` (new parser for the nested thing/steps shape; existing dedup logic was written for the flat model and does not carry over). The offer logic (new). The card (thing → step with reason).
-
-**Delete:** `ContextCheck`. `lib/scoring.ts`. `lib/energy-labels.ts`. The snooze budget. The `/tasks` list page. `priority`, `energy` as offer inputs.
-
-Roughly 60% of the code survives. The deleted parts are the ones that took longest to write.
-
----
-
-## Build order
-
-1. Schema: `things` / `steps` / `step_events`, drop `tasks` / `task_events`
-2. Test one-pass vs two-pass extraction (see section above), then rewrite extraction prompt and `lib/lifewalk-parse.ts` for the nested shape
-3. Offer logic — three, different shapes, reason attached, degrade to generic when unknown
-4. Strip ContextCheck, scoring, energy labels, snooze, list page
-5. Rework the card (thing → live step with reason)
-6. Post-accept question
-
-**Not in v1:** notifications and the obligation class, voice from the house, photos, the stopping ritual, the household display, nudge back/forward. All designed; none needed to find out whether the offer works.
 
 ---
 

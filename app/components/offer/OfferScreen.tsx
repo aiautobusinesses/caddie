@@ -7,11 +7,8 @@ type Props = {
   offer: OfferItem[]
   careGroup: CareGroupOffer | null
   actionError: string | null
-  peekBreakdown: Record<string, string[]>
-  peekLoading: Record<string, boolean>
   onStart: (item: OfferItem) => void
   onSkipAll: () => void
-  onPeek: (thingId: string) => void
   onCapture: () => void
   onRefresh: () => void
 }
@@ -20,11 +17,8 @@ export default function OfferScreen({
   offer,
   careGroup,
   actionError,
-  peekBreakdown,
-  peekLoading,
   onStart,
   onSkipAll,
-  onPeek,
   onCapture,
   onRefresh,
 }: Props) {
@@ -76,39 +70,15 @@ export default function OfferScreen({
                   <div className="text-2xl font-bold leading-[1.15] tracking-[-0.015em] text-fg text-pretty">
                     {item.thing_name}
                   </div>
+                  <div className="mt-1.5 text-sm leading-[1.4] text-subtle text-pretty">
+                    {item.step_name}
+                  </div>
                   {item.reason && (
                     <div className="border-t border-border mt-3.5 pt-3 text-sm leading-[1.4] text-muted">
                       {item.reason}
                     </div>
                   )}
                 </button>
-                {peekBreakdown[item.thing_id] ? (
-                  <div className="border-t border-border px-[22px] pb-3.5">
-                    <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted mt-3 mb-2">First steps</p>
-                    <ol className="flex flex-col gap-1.5">
-                      {peekBreakdown[item.thing_id].map((step, i) => (
-                        <li key={i} className="flex gap-2 text-sm leading-[1.4] text-subtle">
-                          <span className="text-dim flex-shrink-0">{i + 1}.</span>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : (
-                  <div className="border-t border-border px-[22px] py-2.5">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onPeek(item.thing_id)
-                      }}
-                      disabled={peekLoading[item.thing_id]}
-                      className="text-[12px] font-bold text-muted hover:text-subtle transition-colors disabled:opacity-40"
-                    >
-                      {peekLoading[item.thing_id] ? "Thinking…" : "Break this task down"}
-                    </button>
-                  </div>
-                )}
               </div>
             ))}
           </div>

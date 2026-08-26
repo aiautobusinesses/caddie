@@ -45,6 +45,7 @@ export type LifeWalkExtractedStep = {
   band: StepBand
   mode: StepMode
   shape: StepShape
+  needs_know_how: boolean
   recurrence_rule: RecurrenceRule | null
   next_due: string | null
 }

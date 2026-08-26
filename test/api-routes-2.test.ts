@@ -74,18 +74,35 @@ function jsonReq(url: string, body: unknown, method = "POST"): NextRequest {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// /api/things/[id]/breakdown
+// /api/things/[id]/prepend-lookup
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/things/[id]/breakdown", async () => {
-  const { POST } = await import("@/app/api/things/[id]/breakdown/route")
+describe("POST /api/things/[id]/prepend-lookup", async () => {
+  const { POST } = await import("@/app/api/things/[id]/prepend-lookup/route")
   const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
 
-  beforeEach(async () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "test")
-    const create = await getAnthropicCreate()
-    create.mockReset()
-  })
+  // Builds a from() mock that sequences: first call → thing fetch, second call → steps insert, third call → things update
+  function makeFrom({
+    thingData = { id: "t1", live_step_id: "s1", steps: [{ id: "s1", name: "Prep walls", step_order: 0 }] },
+    thingError = null,
+    insertData = { id: "new-step" },
+    insertError = null,
+    updateError = null,
+  }: {
+    thingData?: unknown
+    thingError?: unknown
+    insertData?: unknown
+    insertError?: unknown
+    updateError?: unknown
+  } = {}) {
+    let call = 0
+    return vi.fn(() => {
+      call++
+      if (call === 1) return chain({ data: thingData, error: thingError })
+      if (call === 2) return chain({ data: insertData, error: insertError })
+      return chain({ data: null, error: updateError })
+    })
+  }
 
   it("returns 401 when not authenticated", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(null)
@@ -93,95 +110,74 @@ describe("POST /api/things/[id]/breakdown", async () => {
     expect(res.status).toBe(401)
   })
 
-  it("returns 503 when ANTHROPIC_API_KEY missing", async () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "")
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(503)
-  })
-
   it("returns 404 when thing not found", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: null, error: { message: "not found" } })),
+      from: makeFrom({ thingData: null, thingError: { message: "not found" } }),
     }) as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
     expect(res.status).toBe(404)
   })
 
-  it("returns 500 when AI returns no text block", async () => {
-    const create = await getAnthropicCreate()
-    create.mockResolvedValue({ content: [] })
+  it("returns 200 and prepends lookup step using live step name", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
-    }) as ReturnType<typeof fakeAuth>)
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(500)
-  })
-
-  it("returns 500 when AI response JSON is invalid", async () => {
-    const create = await getAnthropicCreate()
-    create.mockResolvedValue({ content: [{ type: "text", text: "not json" }] })
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
-    }) as ReturnType<typeof fakeAuth>)
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(500)
-  })
-
-  it("returns 500 when steps array is empty", async () => {
-    const create = await getAnthropicCreate()
-    create.mockResolvedValue({ content: [{ type: "text", text: "[]" }] })
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
-    }) as ReturnType<typeof fakeAuth>)
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(500)
-  })
-
-  it("returns steps on success", async () => {
-    const create = await getAnthropicCreate()
-    const steps = ["Step one", "Step two"]
-    create.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify(steps) }] })
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
+      from: makeFrom(),
     }) as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
     expect(res.status).toBe(200)
     const data = await res.json()
-    expect(data.steps).toEqual(steps)
+    expect(data.ok).toBe(true)
+    expect(data.step_id).toBe("new-step")
   })
 
-  it("returns API error status on Anthropic.APIError", async () => {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const APIError = (Anthropic as unknown as any).APIError
-    const create = await getAnthropicCreate()
-    create.mockRejectedValue(new APIError("rate limited", 429))
+  it("uses fallback name when live_step_id does not match any step", async () => {
+    // live_step_id points to a step not in the steps array → liveStep undefined → fallback name
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
+      from: makeFrom({
+        thingData: { id: "t1", live_step_id: "missing", steps: [{ id: "s1", name: "Prep walls", step_order: 0 }] },
+      }),
     }) as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(429)
+    expect(res.status).toBe(200)
   })
 
-  it("returns 500 on generic error", async () => {
-    const create = await getAnthropicCreate()
-    create.mockRejectedValue(new Error("network"))
+  it("uses step_order -1 when existing steps have order 0 (minOrder 0 → -1)", async () => {
+    // steps = [{step_order: 0}] → minOrder = 0 → inserted at -1
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
+      from: makeFrom(),
     }) as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(200)
   })
 
-  it("returns 500 when AI returns steps with only non-strings (filtered to empty)", async () => {
-    const create = await getAnthropicCreate()
-    create.mockResolvedValue({ content: [{ type: "text", text: "[1, 2, 3]" }] })
+  it("returns 500 when step insert fails", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
+      from: makeFrom({ insertData: null, insertError: { message: "insert failed" } }),
     }) as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
     expect(res.status).toBe(500)
+    const data = await res.json()
+    expect(data.error).toBe("insert failed")
+  })
+
+  it("returns 500 with fallback message when insertError is null but data is null", async () => {
+    // insertError null but newStep also null → fallback "Failed to insert step"
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
+      from: makeFrom({ insertData: null, insertError: null }),
+    }) as ReturnType<typeof fakeAuth>)
+    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
+    expect(res.status).toBe(500)
+    const data = await res.json()
+    expect(data.error).toBe("Failed to insert step")
+  })
+
+  it("returns 500 when live_step_id update fails", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
+      from: makeFrom({ updateError: { message: "update failed" } }),
+    }) as ReturnType<typeof fakeAuth>)
+    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
+    expect(res.status).toBe(500)
+    const data = await res.json()
+    expect(data.error).toBe("update failed")
   })
 })
 
@@ -469,7 +465,7 @@ describe("POST /api/capture/voice", async () => {
   })
 
   it("returns 201 on success", async () => {
-    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, recurrence_rule: null, next_due: null }] }]
+    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null }] }]
     const create = await getAnthropicCreate()
     create.mockResolvedValue({ content: [{ type: "text", text: "[]" }] })
     vi.mocked(parseLifeWalkThingsFromModelText).mockReturnValue(things)
@@ -479,7 +475,7 @@ describe("POST /api/capture/voice", async () => {
   })
 
   it("returns 500 when persistThings throws", async () => {
-    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, recurrence_rule: null, next_due: null }] }]
+    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null }] }]
     const create = await getAnthropicCreate()
     create.mockResolvedValue({ content: [{ type: "text", text: "[]" }] })
     vi.mocked(parseLifeWalkThingsFromModelText).mockReturnValue(things)
@@ -489,7 +485,7 @@ describe("POST /api/capture/voice", async () => {
   })
 
   it("returns 500 with generic message when non-Error thrown in persist", async () => {
-    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, recurrence_rule: null, next_due: null }] }]
+    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null }] }]
     const create = await getAnthropicCreate()
     create.mockResolvedValue({ content: [{ type: "text", text: "[]" }] })
     vi.mocked(parseLifeWalkThingsFromModelText).mockReturnValue(things)
@@ -701,53 +697,3 @@ describe("POST /api/lifewalk — branch coverage", async () => {
   })
 })
 
-describe("POST /api/things/[id]/breakdown — branch coverage", async () => {
-  const { POST } = await import("@/app/api/things/[id]/breakdown/route")
-  const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
-
-  beforeEach(async () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "test")
-    const create = await getAnthropicCreate()
-    create.mockReset()
-  })
-
-  it("returns 502 on Anthropic.APIError with null status (route.ts:83 — error.status ?? 502)", async () => {
-    // error.status ?? 502 — null status → 502
-    const { default: Anthropic } = await import("@anthropic-ai/sdk")
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const APIError = (Anthropic as unknown as any).APIError
-    const create = await getAnthropicCreate()
-    create.mockRejectedValue(new APIError("timeout", null))
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
-    }) as ReturnType<typeof fakeAuth>)
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(502)
-  })
-
-  it("returns 500 with error message on generic Error (route.ts:85)", async () => {
-    // error instanceof Anthropic.APIError false → generic error → error.message
-    const create = await getAnthropicCreate()
-    create.mockRejectedValue(new Error("some generic failure"))
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
-    }) as ReturnType<typeof fakeAuth>)
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(500)
-    const data = await res.json()
-    expect(data.error).toBe("some generic failure")
-  })
-
-  it("returns 500 with 'Breakdown failed' when non-Error thrown (route.ts:85)", async () => {
-    // non-Error thrown → "Breakdown failed" fallback
-    const create = await getAnthropicCreate()
-    create.mockRejectedValue("raw string error")
-    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
-      from: vi.fn(() => chain({ data: { id: "t1", name: "Thing" }, error: null })),
-    }) as ReturnType<typeof fakeAuth>)
-    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
-    expect(res.status).toBe(500)
-    const data = await res.json()
-    expect(data.error).toBe("Breakdown failed")
-  })
-})

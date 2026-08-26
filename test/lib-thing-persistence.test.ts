@@ -10,7 +10,7 @@ function makeThing(overrides: Partial<LifeWalkExtractedThing> = {}): LifeWalkExt
     notify_time_of_day: null,
     notify_escalate: false,
     steps: [
-      { name: "Order panel", band: "short", mode: "thinking", shape: "clean", recurrence_rule: null, next_due: null },
+      { name: "Order panel", band: "short", mode: "thinking", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null },
     ],
     ...overrides,
   }
@@ -233,7 +233,7 @@ describe("persistThings", () => {
       } as unknown as Parameters<typeof persistThings>[0]
     })()
     const thing = makeThing({
-      steps: [{ name: "Water", band: "short", mode: "doing", shape: "clean", recurrence_rule: { type: "fixed", days: 7, anchor: "completion" }, next_due: "2024-03-01" }],
+      steps: [{ name: "Water", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" }, next_due: "2024-03-01" }],
     })
     const result = await persistThings(supabase, [thing], { source: "life_walk", userId: "u1" })
     expect(result.saved).toHaveLength(1)
@@ -294,7 +294,7 @@ describe("persistThings", () => {
       } as unknown as Parameters<typeof persistThings>[0]
     })()
     const thing = makeThing({
-      steps: [{ name: "Step", band: undefined as unknown as "short", mode: undefined as unknown as "doing", shape: undefined as unknown as "clean", recurrence_rule: null, next_due: undefined as unknown as null }],
+      steps: [{ name: "Step", band: undefined as unknown as "short", mode: undefined as unknown as "doing", shape: undefined as unknown as "clean", needs_know_how: false, recurrence_rule: null, next_due: undefined as unknown as null }],
     })
     const result = await persistThings(supabase, [thing], { source: "life_walk", userId: "u1" })
     expect(result.saved).toHaveLength(1)

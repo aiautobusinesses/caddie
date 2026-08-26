@@ -5,6 +5,7 @@ import Spinner from "./Spinner"
 import { useOfferCardState } from "./offer/useOfferCardState"
 import OfferScreen from "./offer/OfferScreen"
 import FocusScreen from "./offer/FocusScreen"
+import FamiliarityScreen from "./offer/FamiliarityScreen"
 import SettingsScreen from "./offer/SettingsScreen"
 import type { OfferCardProps } from "./offer/types"
 
@@ -16,25 +17,21 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     offer,
     careGroup,
     inProgress,
-    breakdown,
+    pendingItem,
     refreshing,
-    loadingBreakdown,
     fetchError,
     actionError,
-    breakdownError,
-    peekBreakdown,
-    peekLoading,
     thingComplete,
     setThingComplete,
     justStarted,
     refreshOffer,
     handleStart,
+    handleFamiliarityYes,
+    handleFamiliarityNo,
     handleDone,
-    handleBreakdown,
     handleSkipAll,
     handleSaveName,
     handleAbandon,
-    handlePeek,
   } = useOfferCardState({ initialOffer, initialInProgress, initialCareGroup })
 
   if (thingComplete) {
@@ -80,26 +77,27 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
             offer={offer}
             careGroup={careGroup}
             actionError={actionError}
-            peekBreakdown={peekBreakdown}
-            peekLoading={peekLoading}
             onStart={(item) => void handleStart(item)}
             onSkipAll={() => void handleSkipAll(offer)}
-            onPeek={(thingId) => void handlePeek(thingId)}
             onCapture={openCapture}
             onRefresh={() => void refreshOffer()}
+          />
+        )}
+
+        {screen === "familiarity" && pendingItem && (
+          <FamiliarityScreen
+            item={pendingItem}
+            onYes={() => void handleFamiliarityYes()}
+            onNo={() => void handleFamiliarityNo()}
           />
         )}
 
         {screen === "focus" && inProgress && (
           <FocusScreen
             inProgress={inProgress}
-            breakdown={breakdown}
-            loadingBreakdown={loadingBreakdown}
-            breakdownError={breakdownError}
             actionError={actionError}
             justStarted={justStarted}
             onDone={(stillGoing) => void handleDone(stillGoing)}
-            onBreakdown={() => void handleBreakdown()}
             onSaveName={(newName) => void handleSaveName(newName)}
             onAbandon={() => void handleAbandon()}
           />
