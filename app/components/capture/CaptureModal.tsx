@@ -5,12 +5,14 @@ import { useCapture } from "./CaptureContext"
 import TaskCaptureFlow from "./TaskCaptureFlow"
 import EntityCaptureFlow from "./EntityCaptureFlow"
 import { notifyTasksUpdated } from "@/lib/capture"
+import { useWakeLock } from "@/lib/use-wake-lock"
 
 type CaptureMode = "choose" | "task" | "entity"
 
 export default function CaptureModal() {
   const { isOpen, closeCapture } = useCapture()
   const [mode, setMode] = useState<CaptureMode>("choose")
+  useWakeLock(isOpen)
 
   if (!isOpen) return null
 

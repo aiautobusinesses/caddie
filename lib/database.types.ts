@@ -10,6 +10,66 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      passkey_credentials: {
+        Row: {
+          id: string
+          user_id: string
+          credential_id: string
+          public_key_spki: string
+          sign_count: number
+          aaguid: string | null
+          created_at: string
+          last_used_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          credential_id: string
+          public_key_spki: string
+          sign_count?: number
+          aaguid?: string | null
+          created_at?: string
+          last_used_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          credential_id?: string
+          public_key_spki?: string
+          sign_count?: number
+          aaguid?: string | null
+          created_at?: string
+          last_used_at?: string | null
+        }
+        Relationships: []
+      }
+      passkey_challenges: {
+        Row: {
+          id: string
+          challenge: string
+          user_id: string | null
+          credential_id: string | null
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          challenge: string
+          user_id?: string | null
+          credential_id?: string | null
+          expires_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          challenge?: string
+          user_id?: string | null
+          credential_id?: string | null
+          expires_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           id: string
