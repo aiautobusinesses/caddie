@@ -41,11 +41,19 @@ export async function GET(request: Request) {
     crypto.getRandomValues(new Uint8Array(32)).buffer as ArrayBuffer,
   )
 
-  await service.from("passkey_challenges").insert({
+  const { error: insertErr } = await service.from("passkey_challenges").insert({
     challenge,
     user_id: cred.user_id,
     credential_id: credentialId,
   })
+
+  if (insertErr) {
+    console.error("[passkey authenticate GET]", insertErr)
+    return NextResponse.json(
+      { error: "Failed to create challenge. Check SUPABASE_SERVICE_ROLE_KEY and that migration 007 has been applied." },
+      { status: 500 },
+    )
+  }
 
   return NextResponse.json({ challenge, rpId: RP_ID })
 }

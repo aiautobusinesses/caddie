@@ -31,10 +31,18 @@ export async function GET() {
 
   // Store challenge server-side
   const service = createServiceClient()
-  await service.from("passkey_challenges").insert({
+  const { error: insertErr } = await service.from("passkey_challenges").insert({
     challenge,
     user_id: user.id,
   })
+
+  if (insertErr) {
+    console.error("[passkey register GET]", insertErr)
+    return NextResponse.json(
+      { error: "Failed to create challenge. Check SUPABASE_SERVICE_ROLE_KEY and that migration 007 has been applied." },
+      { status: 500 },
+    )
+  }
 
   return NextResponse.json({
     challenge,
