@@ -137,18 +137,6 @@ export default function SettingsScreen() {
       </div>
 
       <div className="border-t-2 border-border overflow-y-auto flex-1">
-        {/* Your list */}
-        <div className="px-6 py-4 border-b border-border">
-          <div className="flex justify-between items-baseline gap-3">
-            <span className="text-md font-semibold text-fg">Your list</span>
-            <span className="text-sm text-accent">Hidden on purpose</span>
-          </div>
-          <p className="mt-2.5 text-[12.5px] leading-[1.5] text-subtle max-w-[290px]">
-            Seeing the pile is the injury — you can&rsquo;t do it all, and you can&rsquo;t do only
-            the interesting ones, so nothing gets done. Caddie holds all of it and hands you three.
-          </p>
-        </div>
-
         {/* Do another life walk */}
         <button
           type="button"
