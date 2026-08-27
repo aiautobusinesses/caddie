@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthenticatedContext } from "@/lib/api/session"
+import { resolveAiGateway } from "@/lib/ai-gateway"
 import { seedCarePlan } from "@/lib/seed-care-plan"
 import { computeInitialNextDueAt, parseIntervals } from "@/lib/care"
+import type { Json } from "@/lib/database.types"
 
 export type CapturedEntity = {
   name: string
@@ -47,8 +49,13 @@ export async function POST(req: NextRequest) {
 
   const { supabase, user } = auth
 
+  const gateway = await resolveAiGateway(supabase, user.id)
+  if (gateway.error !== null) {
+    return NextResponse.json({ error: gateway.error }, { status: 503 })
+  }
+
   // Ask LLM to extract entity + generate care plan
-  const seeded = await seedCarePlan(sentence)
+  const seeded = await seedCarePlan(sentence, gateway.client)
   if ("error" in seeded) {
     return NextResponse.json({ error: seeded.error }, { status: 502 })
   }
@@ -58,56 +65,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Generated intervals were invalid" }, { status: 502 })
   }
 
-  // Insert entity
-  const { data: entityRow, error: entityError } = await supabase
-    .from("entities")
-    .insert({
-      user_id: user.id,
-      name: seeded.name,
-      kind: seeded.kind,
-      location: seeded.location ?? null,
-    })
-    .select("id")
-    .single()
-
-  if (entityError || !entityRow) {
-    return NextResponse.json(
-      { error: entityError?.message ?? "Failed to create entity" },
-      { status: 500 },
-    )
-  }
-
   const nextDueAt = computeInitialNextDueAt(intervals)
 
-  // Insert care plan
-  const { data: planRow, error: planError } = await supabase
-    .from("care_plans")
-    .insert({
-      entity_id: entityRow.id,
-      user_id: user.id,
-      action: seeded.action,
-      intervals: intervals as unknown as import("@/lib/database.types").Json,
-      tolerance_days: seeded.tolerance_days,
-      overdue_days: seeded.overdue_days,
-      next_due_at: nextDueAt,
-      source: "generated",
-    })
-    .select("id")
-    .single()
+  const { data: rpcResult, error: rpcError } = await supabase.rpc("insert_entity_with_care_plan", {
+    p_user_id: user.id,
+    p_name: seeded.name,
+    p_kind: seeded.kind,
+    p_location: seeded.location ?? null,
+    p_action: seeded.action,
+    p_intervals: intervals as unknown as Json,
+    p_tolerance_days: seeded.tolerance_days,
+    p_overdue_days: seeded.overdue_days,
+    p_next_due_at: nextDueAt,
+  })
 
-  if (planError || !planRow) {
-    // Clean up the orphaned entity
-    await supabase.from("entities").delete().eq("id", entityRow.id)
+  if (rpcError || !rpcResult) {
     return NextResponse.json(
-      { error: planError?.message ?? "Failed to create care plan" },
+      { error: rpcError?.message ?? "Failed to create entity" },
       { status: 500 },
     )
   }
 
+  const { entity_id, plan_id } = rpcResult as { entity_id: string; plan_id: string }
+
   const response: SeedResponse = {
-    entity_id: entityRow.id,
+    entity_id,
     entity_name: seeded.name,
-    care_plan_id: planRow.id,
+    care_plan_id: plan_id,
     action: seeded.action,
     intervals,
     tolerance_days: seeded.tolerance_days,

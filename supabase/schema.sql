@@ -1,9 +1,23 @@
 -- Profiles (extends Supabase auth.users)
+create type account_tier as enum ('standard', 'advanced');
+
 create table profiles (
-  id              uuid primary key references auth.users on delete cascade,
-  timezone        text not null default 'Europe/London',
-  onboarding_done bool not null default false,
-  created_at      timestamptz not null default now()
+  id                uuid primary key references auth.users on delete cascade,
+  timezone          text not null default 'Europe/London',
+  onboarding_done   bool not null default false,
+  account_tier      account_tier not null default 'standard',
+  anthropic_api_key text,
+  created_at        timestamptz not null default now()
+);
+
+create table invites (
+  id               uuid primary key default gen_random_uuid(),
+  email            text not null unique,
+  invited_by       uuid references auth.users on delete set null,
+  account_tier     account_tier not null default 'standard',
+  accepted_by      uuid unique references auth.users on delete set null,
+  accepted_at      timestamptz,
+  created_at       timestamptz not null default now()
 );
 
 alter table profiles enable row level security;
@@ -23,6 +37,17 @@ create policy "Profiles update own"
 create policy "Profiles delete own"
   on profiles for delete
   using (auth.uid() = id);
+
+alter table invites enable row level security;
+
+create policy "Inviters can manage invites"
+  on invites for all
+  using (auth.uid() = invited_by)
+  with check (auth.uid() = invited_by);
+
+create policy "Invitees can read their invite"
+  on invites for select
+  using (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
 
 -- Private schema — not exposed via PostgREST, so not callable via /rest/v1/rpc/
 create schema if not exists internal;
@@ -162,6 +187,29 @@ alter table push_subscriptions enable row level security;
 create policy "Users can manage their own push subscriptions"
   on push_subscriptions for all
   using (auth.uid() = user_id);
+
+
+-- Per-user integrations (Advanced accounts only)
+create table user_integrations (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users on delete cascade,
+  provider     text not null,
+  token        text not null unique default encode(gen_random_bytes(32), 'hex'),
+  label        text,
+  created_at   timestamptz not null default now(),
+
+  unique (user_id, provider)
+);
+
+alter table user_integrations enable row level security;
+
+create policy "Users can manage their own integrations"
+  on user_integrations for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create index user_integrations_token on user_integrations (token);
+create index user_integrations_user_id on user_integrations (user_id);
 
 
 -- updated_at trigger (shared)

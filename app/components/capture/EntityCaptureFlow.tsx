@@ -3,8 +3,7 @@
 import { useState } from "react"
 import type { SeedResponse } from "@/app/api/entities/route"
 import { TASKS_UPDATED_EVENT } from "@/lib/capture"
-
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+import { MONTH_LABELS } from "@/lib/months"
 
 type Stage = "input" | "processing" | "review"
 
@@ -155,7 +154,7 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
             {seeded.action} every…
           </p>
           <div className="grid grid-cols-4 gap-x-3 gap-y-2">
-            {MONTHS.map((label, i) => {
+            {MONTH_LABELS.map((label, i) => {
               const days = intervals[String(i + 1)]
               return (
                 <div key={label} className="flex flex-col gap-0.5">

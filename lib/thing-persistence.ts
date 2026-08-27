@@ -24,28 +24,7 @@ export async function persistThings(
       continue
     }
 
-    const { data: thingRow, error: thingError } = await supabase
-      .from("things")
-      .insert({
-        user_id: options.userId,
-        name: thing.name.trim(),
-        class: thing.class ?? "project",
-        notify_window: thing.notify_window ?? null,
-        notify_time_of_day: thing.notify_time_of_day ?? null,
-        notify_escalate: thing.notify_escalate ?? false,
-        source: options.source,
-      })
-      .select("id")
-      .single()
-
-    if (thingError || !thingRow) {
-      throw new Error(thingError?.message ?? "Failed to insert thing")
-    }
-
-    const thingId = thingRow.id
-    const stepInserts = thing.steps.map((step, index) => ({
-      thing_id: thingId,
-      user_id: options.userId,
+    const steps = thing.steps.map((step, index) => ({
       name: step.name.trim(),
       step_order: index,
       band: step.band ?? "sitting",
@@ -56,27 +35,21 @@ export async function persistThings(
         ? (parseRecurrenceRule(step.recurrence_rule) as Json)
         : null,
       next_due: step.next_due ?? null,
-      done: false,
     }))
 
-    const { data: stepRows, error: stepsError } = await supabase
-      .from("steps")
-      .insert(stepInserts)
-      .select("id, step_order")
+    const { data: thingId, error } = await supabase.rpc("insert_thing_with_steps", {
+      p_user_id: options.userId,
+      p_name: thing.name.trim(),
+      p_class: thing.class ?? "project",
+      p_notify_window: thing.notify_window ?? null,
+      p_notify_time_of_day: thing.notify_time_of_day ?? null,
+      p_notify_escalate: thing.notify_escalate ?? false,
+      p_source: options.source,
+      p_steps: steps as unknown as Json,
+    })
 
-    if (stepsError || !stepRows?.length) {
-      await supabase.from("things").delete().eq("id", thingId)
-      throw new Error(stepsError?.message ?? "Failed to insert steps")
-    }
-
-    const firstStep = stepRows.find((step) => step.step_order === 0) ?? stepRows[0]
-    const { error: liveStepError } = await supabase
-      .from("things")
-      .update({ live_step_id: firstStep.id })
-      .eq("id", thingId)
-
-    if (liveStepError) {
-      throw new Error(liveStepError.message)
+    if (error || !thingId) {
+      throw new Error(error?.message ?? "Failed to insert thing")
     }
 
     saved.push({ thing_id: thingId, name: thing.name.trim() })

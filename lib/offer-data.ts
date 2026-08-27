@@ -43,6 +43,10 @@ export async function loadOfferData(
       `)
       .eq("user_id", userId)
       .is("archived_at", null),
+      // Note: plans whose entities are archived are filtered client-side in care-grouping.ts
+      // (!p.entities.archived_at). Filtering on joined columns server-side is not reliably
+      // supported in this version of the Supabase JS client, so we accept the minor
+      // inefficiency of fetching those rows and discarding them.
     supabase
       .from("profiles")
       .select("last_care_offer_date")
@@ -54,8 +58,8 @@ export async function loadOfferData(
 
   const result = computeOffer({
     today,
-    things: (things ?? []) as OfferThingRow[],
-    carePlans: (carePlans ?? []) as CarePlanRow[],
+    things: (things ?? []) as unknown as OfferThingRow[],
+    carePlans: (carePlans ?? []) as unknown as CarePlanRow[],
     lastCareOfferDate:
       (profileData as { last_care_offer_date: string | null } | null)?.last_care_offer_date ?? null,
   })

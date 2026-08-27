@@ -2,6 +2,8 @@
 
 This guide wires Google Home → Home Assistant → Caddie so that anything you say to a Google Home speaker lands in your Caddie capture queue.
 
+> **Advanced accounts only.** Home Assistant integration requires an Advanced Caddie account. Contact your invite sender to request the Advanced tier.
+
 ---
 
 ## How it works
@@ -18,9 +20,11 @@ Home Assistant Assist pipeline
         │
         ▼
 POST /api/capture/voice   ← Caddie webhook (this endpoint)
+  Authorization: Bearer <your-integration-token>
         │
         ▼
   Claude extracts things & steps
+  (using your personal Anthropic key)
         │
         ▼
   Saved to your Caddie account
@@ -30,50 +34,38 @@ POST /api/capture/voice   ← Caddie webhook (this endpoint)
 
 ## Prerequisites
 
-- Home Assistant with the **Google Assistant SDK** or **Google Home** integration configured (so HA can hear your speaker)
+- An Advanced Caddie account
+- Your Anthropic API key configured in Caddie Settings
+- Home Assistant with the **Google Assistant SDK** or **Google Home** integration configured
 - Alternatively: **Assist** with a local Whisper STT pipeline — works without Google Cloud
 - Your Caddie deployment is reachable from your HA instance (Nabu Casa / Cloudflare Tunnel / public URL)
 
 ---
 
-## Step 1 — Add the webhook secret to Caddie
-
-Generate a random secret (e.g. `openssl rand -hex 32`) and add it to your Caddie `.env.local`:
-
-```
-VOICE_WEBHOOK_SECRET=your-secret-here
-```
-
-Redeploy (or restart the dev server) for the env var to take effect.
-
----
-
-## Step 2 — Find your Caddie user ID
+## Step 1 — Generate an integration token in Caddie
 
 1. Open your Caddie app and sign in
-2. In your browser's dev tools, run:
-   ```js
-   (await (await import('/node_modules/@supabase/supabase-js/dist/module/index.js')).createClient(
-     window.__ENV?.SUPABASE_URL, window.__ENV?.SUPABASE_KEY
-   ).auth.getUser()).data.user.id
-   ```
-   Or more practically: open Supabase Studio → Authentication → Users → copy your user UUID.
+2. Tap **Settings** in the bottom nav
+3. Scroll to the **Integrations** section (visible on Advanced accounts only)
+4. Select **Home Assistant** from the provider dropdown and tap **Generate token**
+5. Copy the token — it will look like a 64-character hex string
+
+This token uniquely identifies your account. Keep it private.
 
 ---
 
-## Step 3 — Add a Home Assistant secret
+## Step 2 — Add the token and URL to Home Assistant
 
 In `secrets.yaml`:
 
 ```yaml
-caddie_webhook_secret: "your-secret-here"
-caddie_user_id: "your-supabase-user-uuid"
+caddie_integration_token: "your-64-char-token-here"
 caddie_url: "https://your-caddie-app.vercel.app"
 ```
 
 ---
 
-## Step 4 — Create a custom sentence / intent
+## Step 3 — Create a custom sentence / intent
 
 In your HA config directory, create or append to `config/custom_sentences/en/caddie.yaml`:
 
@@ -101,7 +93,7 @@ intent_script:
 
 ---
 
-## Step 5 — Add the REST command
+## Step 4 — Add the REST command
 
 In `configuration.yaml`:
 
@@ -111,16 +103,15 @@ rest_command:
     url: "{{ caddie_url }}/api/capture/voice"
     method: POST
     headers:
-      Authorization: "Bearer {{ caddie_webhook_secret }}"
+      Authorization: "Bearer {{ caddie_integration_token }}"
       Content-Type: "application/json"
     payload: >
       {
-        "text": "{{ text }}",
-        "user_id": "{{ caddie_user_id }}"
+        "text": "{{ text }}"
       }
 ```
 
-Or with hardcoded values if you prefer not to use templating on the URL:
+Or with hardcoded values:
 
 ```yaml
 rest_command:
@@ -128,33 +119,29 @@ rest_command:
     url: "https://your-caddie-app.vercel.app/api/capture/voice"
     method: POST
     headers:
-      Authorization: "Bearer your-secret-here"
+      Authorization: "Bearer your-64-char-token-here"
       Content-Type: "application/json"
-    payload: '{"text": "{{ text }}", "user_id": "your-supabase-user-uuid"}'
+    payload: '{"text": "{{ text }}"}'
 ```
 
 ---
 
-## Step 6 — Reload and test
+## Step 5 — Reload and test
 
 1. In HA Developer Tools → YAML → reload **Custom Sentences** and **Rest Commands**
-2. Test via Developer Tools → Template:
-   ```
-   {{ states('input_text.test') }}
-   ```
-3. Or test directly with curl:
+2. Test directly with curl:
    ```bash
    curl -X POST https://your-caddie-app.vercel.app/api/capture/voice \
-     -H "Authorization: Bearer your-secret-here" \
+     -H "Authorization: Bearer your-64-char-token-here" \
      -H "Content-Type: application/json" \
-     -d '{"text": "bleed the radiator and book the car in", "user_id": "your-uuid"}'
+     -d '{"text": "bleed the radiator and book the car in"}'
    ```
    Expected response:
    ```json
    {"saved":[{"thing_id":"...","name":"Radiator"},{"thing_id":"...","name":"Car service"}]}
    ```
 
-4. Say to your Google Home: **"Hey Google, add to Caddie — bleed the radiator"**
+3. Say to your Google Home: **"Hey Google, add to Caddie — bleed the radiator"**
 
 ---
 
@@ -162,12 +149,11 @@ rest_command:
 
 ```
 POST /api/capture/voice
-Authorization: Bearer <VOICE_WEBHOOK_SECRET>
+Authorization: Bearer <integration-token>
 Content-Type: application/json
 
 {
-  "text": "bleed the radiator, book the car in",
-  "user_id": "supabase-user-uuid"
+  "text": "bleed the radiator, book the car in"
 }
 ```
 
@@ -179,21 +165,21 @@ Content-Type: application/json
 **Error responses:**
 | Status | Meaning |
 |--------|---------|
-| 401 | Wrong or missing bearer token |
-| 400 | Missing `text` or `user_id` |
+| 401 | Missing or invalid integration token |
+| 400 | Missing `text` field |
 | 422 | Text parsed but no things extracted |
-| 503 | `VOICE_WEBHOOK_SECRET` or `ANTHROPIC_API_KEY` not set |
+| 503 | Anthropic API key not configured for this account |
 
 ---
 
-## Multi-user households
+## Multi-device households
 
-The `user_id` field lets each person in the house route voice captures to their own account. Create one HA script per person, each with a different `user_id`, and trigger via different wake phrases or HA person entities.
+Each person in the household gets their own integration token from their own Caddie account. Create one HA REST command per person, each referencing a different token, and trigger via different wake phrases or HA person entities.
+
+There is no shared `user_id` in the request body — the token lookup resolves the owning account server-side.
 
 ---
 
-## Household display (bonus)
+## Revoking access
 
-Once this is wired, you can add a Lovelace card that calls `GET /api/offer` (authenticated via a long-lived HA token or a dedicated read-only key) and displays the current offers on a wall-mounted tablet — hitting both of Harkin's progress-display amplifiers (physically visible, publicly present) without asking anyone to report to each other.
-
-This is noted in DESIGN.md as a planned feature; the webhook is the prerequisite.
+To revoke a token, return to **Settings → Integrations** in Caddie and tap **Remove** next to the Home Assistant integration. The token is immediately invalidated and any future requests using it will receive 401.

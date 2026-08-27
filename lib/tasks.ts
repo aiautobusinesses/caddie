@@ -15,8 +15,19 @@ export type StepRow = Database["public"]["Tables"]["steps"]["Row"]
 export type StepInsert = Database["public"]["Tables"]["steps"]["Insert"]
 export type StepEventRow = Database["public"]["Tables"]["step_events"]["Row"]
 
-/** Event inputs accepted by the API; `why` is stored as `edited` with metadata. */
-export type StepEventInput = EventType | "why"
+/**
+ * Event inputs accepted by the API.
+ * `why` is stored as `edited` with metadata.
+ * The values beyond EventType are application-layer only and are not DB enum values.
+ */
+export type StepEventInput =
+  | EventType
+  | "offered"
+  | "accepted"
+  | "skipped"
+  | "nudged_back"
+  | "nudged_forward"
+  | "why"
 
 const STEP_EVENT_INPUTS: readonly StepEventInput[] = [
   "done", "edited", "notified", "offered", "accepted",
@@ -29,7 +40,10 @@ export function isStepEventInput(value: string): value is StepEventInput {
 
 export function resolveEventTypeForDb(eventType: StepEventInput): EventType {
   if (eventType === "why") return "edited"
-  return eventType
+  // Application-layer values not in the DB enum are stored as "edited" with metadata.
+  const dbValues: readonly string[] = ["done", "edited", "notified"] satisfies EventType[]
+  if (dbValues.includes(eventType)) return eventType as EventType
+  return "edited"
 }
 
 /** Urgency labels used in Life Walk UI and Claude extraction. */

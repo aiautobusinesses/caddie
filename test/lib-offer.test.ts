@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 import { computeOffer } from "@/lib/offer"
 import type { OfferThingRow, OfferComputationInput } from "@/lib/offer"
 import type { CarePlanRow } from "@/lib/care-grouping"

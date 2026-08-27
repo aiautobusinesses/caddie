@@ -2,26 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { MONTH_LABELS } from "@/lib/months"
 
-type MonthLabel = {
-  label: string
-  month: number
-}
-
-const MONTHS: MonthLabel[] = [
-  { label: "Jan", month: 1 },
-  { label: "Feb", month: 2 },
-  { label: "Mar", month: 3 },
-  { label: "Apr", month: 4 },
-  { label: "May", month: 5 },
-  { label: "Jun", month: 6 },
-  { label: "Jul", month: 7 },
-  { label: "Aug", month: 8 },
-  { label: "Sep", month: 9 },
-  { label: "Oct", month: 10 },
-  { label: "Nov", month: 11 },
-  { label: "Dec", month: 12 },
-]
+const MONTHS = MONTH_LABELS.map((label, i) => ({ label, month: i + 1 }))
 
 type Props = {
   planId: string

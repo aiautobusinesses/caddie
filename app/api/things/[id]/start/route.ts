@@ -10,12 +10,15 @@ export async function POST(_req: Request, context: RouteContext) {
   const { id } = await context.params
   const { supabase, user } = auth
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("things")
     .update({ started_at: new Date().toISOString() })
     .eq("id", id)
     .eq("user_id", user.id)
+    .select("id")
+    .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

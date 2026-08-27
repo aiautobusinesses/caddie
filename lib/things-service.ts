@@ -53,68 +53,23 @@ export async function markThingDone(
   thingId: string,
   userId: string,
 ): Promise<MarkThingDoneResult> {
-  const { data: thing, error: fetchError } = await supabase
-    .from("things")
-    .select("id, name, live_step_id")
-    .eq("id", thingId)
-    .eq("user_id", userId)
-    .single()
+  const { data: result, error } = await supabase.rpc("mark_thing_done", {
+    p_thing_id: thingId,
+    p_user_id: userId,
+  })
 
-  if (fetchError || !thing) throw new Error("Thing not found")
+  if (error) throw new Error(error.message)
 
-  const liveStepId = thing.live_step_id ?? null
-  const now = new Date().toISOString()
+  const rpcResult = result as { thing_complete: boolean; thing_name: string | null } | null
+  const thingComplete = rpcResult?.thing_complete ?? false
+  const thingName = rpcResult?.thing_name ?? null
 
-  if (liveStepId) {
-    // Mark the step done first so the "find next undone" query excludes it.
-    await supabase
-      .from("steps")
-      .update({ done: true, done_at: now, last_done_at: now })
-      .eq("id", liveStepId)
-
-    const { data: nextStep } = await supabase
-      .from("steps")
-      .select("id")
-      .eq("thing_id", thingId)
-      .eq("done", false)
-      .neq("id", liveStepId)
-      .order("step_order", { ascending: true })
-      .limit(1)
-      .single()
-
-    const thingComplete = !nextStep
-
-    // Advance the thing and record the event — independent of each other.
-    await Promise.all([
-      supabase
-        .from("things")
-        .update({ live_step_id: nextStep?.id ?? null, started_at: null })
-        .eq("id", thingId),
-      supabase.from("step_events").insert({
-        step_id: liveStepId,
-        thing_id: thingId,
-        user_id: userId,
-        event_type: "done",
-        metadata: { source: "thing_done" },
-      }),
-    ])
-
-    return {
-      ok: true,
-      still_going: false,
-      thing_complete: thingComplete,
-      thing_name: thingComplete ? thing.name : null,
-    }
+  return {
+    ok: true,
+    still_going: false,
+    thing_complete: thingComplete,
+    thing_name: thingName,
   }
-
-  // No live step — just clear started_at
-  await supabase
-    .from("things")
-    .update({ started_at: null })
-    .eq("id", thingId)
-    .eq("user_id", userId)
-
-  return { ok: true, still_going: false, thing_complete: false, thing_name: null }
 }
 
 export type RecordStepEventInput = {
@@ -187,7 +142,7 @@ export async function recordStepEvent(
   if (rule) {
     // Recurring step — record the event and reset the schedule in parallel.
     const nextDue = calculateNextDue(rule, now, step.next_due ?? null)
-    const [{ error: eventError }, { error: stepError }] = await Promise.all([
+    const [{ error: eventError }, { error: stepUpdateError }] = await Promise.all([
       supabase.from("step_events").insert({
         step_id: stepId,
         thing_id: step.thing_id,
@@ -201,42 +156,16 @@ export async function recordStepEvent(
         .eq("id", stepId),
     ])
     if (eventError) throw new Error(eventError.message)
-    if (stepError) throw new Error(stepError.message)
+    if (stepUpdateError) throw new Error(stepUpdateError.message)
   } else {
-    // Non-recurring step — record the event and mark done in parallel,
-    // then find the next undone step and advance the thing.
-    const [{ error: eventError }, { error: stepError }] = await Promise.all([
-      supabase.from("step_events").insert({
-        step_id: stepId,
-        thing_id: step.thing_id,
-        user_id: userId,
-        event_type: dbEventType,
-        metadata,
-      }),
-      supabase
-        .from("steps")
-        .update({ done: true, done_at: now, last_done_at: now })
-        .eq("id", stepId),
-    ])
-    if (eventError) throw new Error(eventError.message)
-    if (stepError) throw new Error(stepError.message)
-
-    // Must run after step is marked done so it's excluded from the query.
-    const { data: nextStep } = await supabase
-      .from("steps")
-      .select("id")
-      .eq("thing_id", step.thing_id)
-      .eq("done", false)
-      .neq("id", stepId)
-      .order("step_order", { ascending: true })
-      .limit(1)
-      .single()
-
-    const { error: thingError } = await supabase
-      .from("things")
-      .update({ live_step_id: nextStep?.id ?? null })
-      .eq("id", step.thing_id)
-    if (thingError) throw new Error(thingError.message)
+    // Non-recurring step — delegate to the atomic RPC which records the event,
+    // marks the step done, and advances the thing's live_step_id in one transaction.
+    const { error: rpcError } = await supabase.rpc("record_step_event_done", {
+      p_step_id: stepId,
+      p_user_id: userId,
+      p_metadata: metadata as Json,
+    })
+    if (rpcError) throw new Error(rpcError.message)
   }
 
   return { ok: true }

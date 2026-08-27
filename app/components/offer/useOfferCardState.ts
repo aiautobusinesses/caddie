@@ -49,6 +49,9 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
   }, [refreshOffer])
 
   async function commitStart(item: OfferItem) {
+    const prevInProgress = inProgress
+    const prevScreen = screen
+
     setInProgress({
       thing_id: item.thing_id,
       thing_name: item.thing_name,
@@ -63,6 +66,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       const res = await fetch(`/api/things/${item.thing_id}/start`, { method: "POST" })
       if (!res.ok) throw new Error("Failed to start")
     } catch (e) {
+      setInProgress(prevInProgress)
+      setScreen(prevScreen)
       setActionError(e instanceof Error ? e.message : "Something went wrong")
     }
   }
@@ -159,7 +164,7 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
   }
 
   async function handleSkipAll(items: OfferItem[]) {
-    await Promise.all(
+    const results = await Promise.allSettled(
       items.map((item) =>
         fetch(`/api/steps/${item.step_id}/event`, {
           method: "POST",
@@ -168,6 +173,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
         })
       )
     )
+    const anyFailed = results.some((r) => r.status === "rejected")
+    if (anyFailed) setActionError("Some items couldn't be skipped")
     void refreshOffer()
   }
 

@@ -1,6 +1,8 @@
+import Anthropic from "@anthropic-ai/sdk"
 import { parseRecurrenceRule, normalizeDateOnly } from "@/lib/recurrence"
 import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass, StepBand, StepMode, StepShape } from "@/lib/tasks"
 import { isTaskUrgency } from "@/lib/tasks"
+import { LIFEWALK_MODEL, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
 
 // ---------------------------------------------------------------------------
 // JSON extraction
@@ -148,3 +150,54 @@ export function parseLifeWalkThingsFromModelText(text: string): LifeWalkExtracte
 
 // Keep old export name as alias so the lifewalk route still compiles until rewritten
 export { isTaskUrgency }
+
+// ---------------------------------------------------------------------------
+// LLM extraction (shared by lifewalk and voice capture routes)
+// ---------------------------------------------------------------------------
+
+export async function extractThingsFromNarration(
+  client: Anthropic,
+  text: string,
+): Promise<LifeWalkExtractedThing[]> {
+  let message: Anthropic.Message
+  try {
+    message = await client.messages.create({
+      model: LIFEWALK_MODEL,
+      max_tokens: 4096,
+      temperature: 0.2,
+      system: LIFEWALK_EXTRACTION_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Narration:\n${text.trim()}`,
+        },
+      ],
+    }, { signal: AbortSignal.timeout(30_000) })
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new Error("AI request timed out. Try again.")
+    }
+    if (error instanceof Anthropic.APIError) {
+      throw error
+    }
+    throw new Error(error instanceof Error ? error.message : "AI request failed")
+  }
+
+  const textBlock = message.content.find((block) => block.type === "text")
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Unexpected response from AI")
+  }
+
+  try {
+    return parseLifeWalkThingsFromModelText(textBlock.text)
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Could not parse things"
+    const isParseError =
+      msg.includes("JSON") ||
+      msg.includes("No valid things") ||
+      msg.includes("model response")
+    throw new Error(
+      isParseError ? "Could not parse your narration. Try again or shorten it." : msg,
+    )
+  }
+}

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthenticatedContext } from "@/lib/api/session"
-import { computeNextDueAt, parseIntervals } from "@/lib/care"
 
 /**
  * POST /api/care-groups/report
@@ -35,64 +34,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No plan_ids provided" }, { status: 400 })
   }
 
-  // Fetch the plans so we can recompute next_due_at
-  const { data: plans, error: fetchError } = await supabase
-    .from("care_plans")
-    .select("id, intervals")
-    .in("id", planIds)
-    .eq("user_id", user.id)
+  const { error } = await supabase.rpc("report_care_group", {
+    p_user_id: user.id,
+    p_plan_ids: planIds,
+    p_done_ids: doneIds,
+  })
 
-  if (fetchError) {
-    return NextResponse.json({ error: fetchError.message }, { status: 500 })
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
-
-  const planMap = new Map<string, { intervals: unknown }>()
-  for (const p of plans ?? []) {
-    planMap.set(p.id, { intervals: p.intervals })
-  }
-
-  const now = new Date().toISOString()
-  const today = now.split("T")[0]
-  const doneSet = new Set(doneIds)
-
-  // Process each plan
-  for (const planId of planIds) {
-    const isDone = doneSet.has(planId)
-    const plan = planMap.get(planId)
-
-    if (isDone && plan) {
-      const intervals = parseIntervals(plan.intervals)
-      const nextDueAt = intervals ? computeNextDueAt(now, intervals) : null
-
-      await supabase
-        .from("care_plans")
-        .update({
-          last_done_at: now,
-          ...(nextDueAt ? { next_due_at: nextDueAt } : {}),
-        })
-        .eq("id", planId)
-        .eq("user_id", user.id)
-
-      await supabase.from("care_events").insert({
-        care_plan_id: planId,
-        user_id: user.id,
-        type: "done",
-      })
-    } else {
-      // not_done — stays due, ages normally
-      await supabase.from("care_events").insert({
-        care_plan_id: planId,
-        user_id: user.id,
-        type: "not_done",
-      })
-    }
-  }
-
-  // Record that care was offered today (once-daily cap)
-  await supabase
-    .from("profiles")
-    .update({ last_care_offer_date: today })
-    .eq("id", user.id)
 
   return NextResponse.json({ ok: true })
 }

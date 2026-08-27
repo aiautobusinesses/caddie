@@ -8,7 +8,8 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 
-const MODEL = "claude-haiku-4-5"
+export const SEED_MODEL = "claude-haiku-4-5"
+const MODEL = SEED_MODEL
 
 const SYSTEM_PROMPT = `You help people set up care schedules for their plants, appliances, and household items.
 
@@ -52,13 +53,10 @@ export type SeededCarePlan = {
 
 export type SeedError = { error: string }
 
-export async function seedCarePlan(sentence: string): Promise<SeededCarePlan | SeedError> {
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-    return { error: "Entity capture is not configured (missing ANTHROPIC_API_KEY)." }
-  }
-
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
+export async function seedCarePlan(
+  sentence: string,
+  client: Anthropic,
+): Promise<SeededCarePlan | SeedError> {
   let text: string
   try {
     const message = await client.messages.create({
@@ -67,7 +65,7 @@ export async function seedCarePlan(sentence: string): Promise<SeededCarePlan | S
       temperature: 0.2,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: sentence }],
-    })
+    }, { signal: AbortSignal.timeout(30_000) })
 
     const block = message.content.find((b) => b.type === "text")
     if (!block || block.type !== "text") {
@@ -75,6 +73,9 @@ export async function seedCarePlan(sentence: string): Promise<SeededCarePlan | S
     }
     text = block.text
   } catch (e) {
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) {
+      return { error: "AI request timed out. Try again." }
+    }
     if (e instanceof Anthropic.APIError) {
       return { error: e.message || "AI request failed" }
     }

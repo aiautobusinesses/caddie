@@ -1,15 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { NextRequest, NextResponse } from "next/server"
-import { parseLifeWalkThingsFromModelText } from "@/lib/lifewalk-parse"
-import { LIFEWALK_MODEL, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
+import { getAuthenticatedContext } from "@/lib/api/session"
+import { resolveAiGateway } from "@/lib/ai-gateway"
+import { extractThingsFromNarration } from "@/lib/lifewalk-parse"
 
 export async function POST(req: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-    return NextResponse.json(
-      { error: "Life walk is not configured (missing ANTHROPIC_API_KEY)." },
-      { status: 503 },
-    )
-  }
+  const auth = await getAuthenticatedContext()
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   let transcript: string
   try {
@@ -23,28 +20,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No transcript provided" }, { status: 400 })
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const gateway = await resolveAiGateway(auth.supabase, auth.user.id)
+  if (gateway.error !== null) {
+    return NextResponse.json({ error: gateway.error }, { status: 503 })
+  }
 
   try {
-    const message = await client.messages.create({
-      model: LIFEWALK_MODEL,
-      max_tokens: 4096,
-      temperature: 0.2,
-      system: LIFEWALK_EXTRACTION_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Narration:\n${transcript.trim()}`,
-        },
-      ],
-    })
-
-    const textBlock = message.content.find((block) => block.type === "text")
-    if (!textBlock || textBlock.type !== "text") {
-      return NextResponse.json({ error: "Unexpected response from AI" }, { status: 500 })
-    }
-
-    const things = parseLifeWalkThingsFromModelText(textBlock.text)
+    const things = await extractThingsFromNarration(gateway.client, transcript)
     return NextResponse.json({ things })
   } catch (error) {
     if (error instanceof Anthropic.APIError) {
@@ -53,18 +35,7 @@ export async function POST(req: NextRequest) {
         { status: error.status ?? 502 },
       )
     }
-
-    const message =
-      error instanceof Error ? error.message : "Could not parse things"
-
-    const isParseError =
-      message.includes("JSON") ||
-      message.includes("No valid things") ||
-      message.includes("model response")
-
-    return NextResponse.json(
-      { error: isParseError ? "Could not parse your narration. Try again or shorten it." : message },
-      { status: 500 },
-    )
+    const message = error instanceof Error ? error.message : "Could not parse things"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

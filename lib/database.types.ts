@@ -1,7 +1,4 @@
-/**
- * Hand-written types aligned with supabase/schema.sql.
- * Replace with generated types (`supabase gen types`) when the CLI is wired up.
- */
+// To regenerate: supabase gen types typescript --local > lib/database.types.ts
 export type Json =
   | string
   | number
@@ -18,6 +15,9 @@ export type Database = {
           id: string
           timezone: string
           onboarding_done: boolean
+          account_tier: Database["public"]["Enums"]["account_tier"]
+          /** Raw key — server-side only; never returned to clients. */
+          anthropic_api_key: string | null
           last_care_offer_date: string | null
           created_at: string
         }
@@ -25,6 +25,8 @@ export type Database = {
           id: string
           timezone?: string
           onboarding_done?: boolean
+          account_tier?: Database["public"]["Enums"]["account_tier"]
+          anthropic_api_key?: string | null
           last_care_offer_date?: string | null
           created_at?: string
         }
@@ -32,7 +34,66 @@ export type Database = {
           id?: string
           timezone?: string
           onboarding_done?: boolean
+          account_tier?: Database["public"]["Enums"]["account_tier"]
+          anthropic_api_key?: string | null
           last_care_offer_date?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      user_integrations: {
+        Row: {
+          id: string
+          user_id: string
+          provider: string
+          token: string
+          label: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          provider: string
+          token?: string
+          label?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          provider?: string
+          token?: string
+          label?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      invites: {
+        Row: {
+          id: string
+          email: string
+          invited_by: string | null
+          account_tier: Database["public"]["Enums"]["account_tier"]
+          accepted_by: string | null
+          accepted_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          invited_by?: string | null
+          account_tier?: Database["public"]["Enums"]["account_tier"]
+          accepted_by?: string | null
+          accepted_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          invited_by?: string | null
+          account_tier?: Database["public"]["Enums"]["account_tier"]
+          accepted_by?: string | null
+          accepted_at?: string | null
           created_at?: string
         }
         Relationships: []
@@ -294,11 +355,41 @@ export type Database = {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      insert_thing_with_steps: {
+        Args: { p_user_id: string; p_name: string; p_class: string; p_notify_window: number | null; p_notify_time_of_day: string | null; p_notify_escalate: boolean; p_source: string; p_steps: Json }
+        Returns: string  // uuid
+      }
+      mark_thing_done: {
+        Args: { p_thing_id: string; p_user_id: string }
+        Returns: Json  // { thing_complete: boolean; thing_name: string | null }
+      }
+      record_step_event_done: {
+        Args: { p_step_id: string; p_user_id: string; p_metadata: Json }
+        Returns: Json  // { ok: true }
+      }
+      prepend_lookup_step: {
+        Args: { p_thing_id: string; p_user_id: string }
+        Returns: Json  // { step_id: string }
+      }
+      insert_entity_with_care_plan: {
+        Args: { p_user_id: string; p_name: string; p_kind: string; p_location: string | null; p_action: string; p_intervals: Json; p_tolerance_days: number; p_overdue_days: number; p_next_due_at: string }
+        Returns: Json  // { entity_id: string; plan_id: string }
+      }
+      accept_invite: {
+        Args: { p_user_id: string; p_email: string }
+        Returns: string | null  // account_tier or null
+      }
+      report_care_group: {
+        Args: { p_user_id: string; p_plan_ids: string[]; p_done_ids: string[] }
+        Returns: Json  // { ok: true }
+      }
+    }
     Enums: {
+      account_tier: "standard" | "advanced"
       thing_class: "obligation" | "project"
       task_source: "life_walk" | "manual" | "voice" | "photo"
-      event_type: "done" | "edited" | "notified" | "offered" | "accepted" | "skipped" | "nudged_back" | "nudged_forward"
+      event_type: "done" | "edited" | "notified"
       notify_time_of_day: "morning" | "afternoon" | "evening"
       step_band: "short" | "sitting" | "run"
       step_mode: "thinking" | "doing"

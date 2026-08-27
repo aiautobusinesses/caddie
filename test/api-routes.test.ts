@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 import type { AuthenticatedContext } from "@/lib/api/session"
 
@@ -20,6 +20,8 @@ import { loadOfferData } from "@/lib/offer-data"
 function fakeAuth(supabaseOverrides: Record<string, unknown> = {}): AuthenticatedContext {
   return {
     user: { id: "u1" },
+    profile: null,
+    getProfile: vi.fn(async () => null),
     supabase: {
       from: vi.fn(),
       auth: {},
@@ -80,22 +82,15 @@ describe("POST /api/care-groups/report", async () => {
     expect(res.status).toBe(400)
   })
 
-  it("returns 500 when plans fetch fails", async () => {
-    const sb = { from: vi.fn(() => chain({ data: null, error: { message: "db fail" } })) }
+  it("returns 500 when rpc fails", async () => {
+    const sb = { rpc: vi.fn(async () => ({ data: null, error: { message: "db fail" } })) }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: [] }))
     expect(res.status).toBe(500)
   })
 
   it("returns 200 on success — done plan", async () => {
-    let call = 0
-    const sb = {
-      from: vi.fn(() => {
-        call++
-        const c = chain({ data: [{ id: "p1", intervals: { "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 7, "10": 7, "11": 7, "12": 7 } }], error: null })
-        return c
-      }),
-    }
+    const sb = { rpc: vi.fn(async () => ({ data: { ok: true }, error: null })) }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: ["p1"] }))
     expect(res.status).toBe(200)
@@ -104,29 +99,27 @@ describe("POST /api/care-groups/report", async () => {
   })
 
   it("returns 200 on success — not-done plan", async () => {
-    const sb = {
-      from: vi.fn(() => chain({ data: [{ id: "p1", intervals: {} }], error: null })),
-    }
+    const sb = { rpc: vi.fn(async () => ({ data: { ok: true }, error: null })) }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: [] }))
     expect(res.status).toBe(200)
   })
 
-  it("handles done plan where planMap has no entry (plan_id not in returned plans)", async () => {
-    // plan_ids has "p2" but DB returns only "p1" → plan is undefined → else branch → not_done insert
-    const sb = {
-      from: vi.fn(() => chain({ data: [{ id: "p1", intervals: {} }], error: null })),
-    }
+  it("calls rpc with correct plan_ids and done_ids", async () => {
+    const rpcFn = vi.fn(async () => ({ data: { ok: true }, error: null }))
+    const sb = { rpc: rpcFn }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
-    const res = await POST(jsonReq("http://localhost", { plan_ids: ["p2"], done_ids: ["p2"] }))
+    const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1", "p2"], done_ids: ["p1"] }))
     expect(res.status).toBe(200)
+    expect(rpcFn).toHaveBeenCalledWith("report_care_group", {
+      p_user_id: "u1",
+      p_plan_ids: ["p1", "p2"],
+      p_done_ids: ["p1"],
+    })
   })
 
-  it("handles done plan where intervals are invalid (nextDueAt is null)", async () => {
-    // parseIntervals returns null → nextDueAt is null → update without next_due_at
-    const sb = {
-      from: vi.fn(() => chain({ data: [{ id: "p1", intervals: null }], error: null })),
-    }
+  it("returns 200 with empty done_ids", async () => {
+    const sb = { rpc: vi.fn(async () => ({ data: { ok: true }, error: null })) }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: ["p1"] }))
     expect(res.status).toBe(200)
@@ -295,7 +288,7 @@ describe("/api/things/[id]", async () => {
     })
 
     it("returns 200 on success", async () => {
-      const sb = { from: vi.fn(() => chain({ error: null })) }
+      const sb = { from: vi.fn(() => chain({ data: { id: "t1" }, error: null })) }
       vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
       const res = await PATCH(jsonReq("http://localhost", { name: "New name" }, "PATCH"), ctx("t1"))
       expect(res.status).toBe(200)
@@ -317,7 +310,7 @@ describe("/api/things/[id]", async () => {
     })
 
     it("returns 200 on success", async () => {
-      const sb = { from: vi.fn(() => chain({ error: null })) }
+      const sb = { from: vi.fn(() => chain({ data: [{ id: "t1" }], error: null })) }
       vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
       const res = await DELETE(new NextRequest("http://localhost", { method: "DELETE" }), ctx("t1"))
       expect(res.status).toBe(200)
@@ -347,7 +340,7 @@ describe("POST /api/things/[id]/start", async () => {
   })
 
   it("returns 200 on success", async () => {
-    const sb = { from: vi.fn(() => chain({ error: null })) }
+    const sb = { from: vi.fn(() => chain({ data: { id: "t1" }, error: null })) }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
     expect(res.status).toBe(200)
@@ -561,39 +554,34 @@ describe("POST /api/care-groups/report — branch coverage", async () => {
     expect(res.status).toBe(400)
   })
 
-  it("handles non-array done_ids (falls back to []) — route.ts:29", async () => {
-    // body.done_ids is not an array → doneIds = [] → plan treated as not_done
-    const sb = {
-      from: vi.fn(() => chain({ data: [{ id: "p1", intervals: {} }], error: null })),
-    }
+  it("handles non-array done_ids (falls back to [])", async () => {
+    // body.done_ids is not an array → doneIds = [] → rpc called with empty done_ids
+    const sb = { rpc: vi.fn(async () => ({ data: { ok: true }, error: null })) }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: "not-array" }))
     expect(res.status).toBe(200)
   })
 
-  it("iterates planMap.set for each returned plan (route.ts:50)", async () => {
-    // planMap.set is called for every plan in the result array
-    const sb = {
-      from: vi.fn(() => chain({
-        data: [
-          { id: "p1", intervals: { "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 7, "10": 7, "11": 7, "12": 7 } },
-          { id: "p2", intervals: { "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 7, "10": 7, "11": 7, "12": 7 } },
-        ],
-        error: null,
-      })),
-    }
+  it("passes multiple plan_ids to rpc", async () => {
+    const rpcFn = vi.fn(async () => ({ data: { ok: true }, error: null }))
+    const sb = { rpc: rpcFn }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1", "p2"], done_ids: ["p1", "p2"] }))
     expect(res.status).toBe(200)
+    expect(rpcFn).toHaveBeenCalledWith("report_care_group", expect.objectContaining({
+      p_plan_ids: ["p1", "p2"],
+      p_done_ids: ["p1", "p2"],
+    }))
   })
 
-  it("handles null plans from DB (route.ts:50 — plans ?? [])", async () => {
-    // DB returns null for plans → plans ?? [] → empty planMap → all treated as not_done
-    const sb = {
-      from: vi.fn(() => chain({ data: null, error: null })),
-    }
+  it("passes empty done_ids to rpc when done_ids is not an array", async () => {
+    const rpcFn = vi.fn(async () => ({ data: { ok: true }, error: null }))
+    const sb = { rpc: rpcFn }
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
-    const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: ["p1"] }))
+    const res = await POST(jsonReq("http://localhost", { plan_ids: ["p1"], done_ids: null }))
     expect(res.status).toBe(200)
+    expect(rpcFn).toHaveBeenCalledWith("report_care_group", expect.objectContaining({
+      p_done_ids: [],
+    }))
   })
 })

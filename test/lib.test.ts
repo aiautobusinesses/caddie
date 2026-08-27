@@ -14,7 +14,6 @@ import {
   TASKS_UPDATED_EVENT,
   notifyTasksUpdated,
   saveCapturedThings,
-  completeOnboarding,
 } from "@/lib/capture"
 import { getSupabasePublishableKey, getSupabaseUrl, hasSupabaseEnv } from "@/lib/env"
 import { parseLifeWalkThingsFromModelText } from "@/lib/lifewalk-parse"

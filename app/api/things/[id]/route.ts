@@ -21,13 +21,16 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("things")
     .update({ name })
     .eq("id", id)
     .eq("user_id", user.id)
+    .select("id")
+    .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
 
@@ -38,12 +41,14 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
   const { id } = await context.params
   const { supabase, user } = auth
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("things")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id)
+    .select("id")
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data || data.length === 0) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

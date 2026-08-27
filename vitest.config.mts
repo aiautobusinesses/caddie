@@ -7,6 +7,10 @@ export default defineConfig({
   test: {
     pool: "vmThreads",
     environment: "jsdom",
+    env: {
+      // Test encryption key — 32 bytes hex, used only in tests
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000001",
+    },
     setupFiles: ["./test/setup.tsx"],
     include: ["test/**/*.test.{ts,tsx}"],
     coverage: {
@@ -14,11 +18,13 @@ export default defineConfig({
       reporter: ["text", "json-summary", "html"],
       include: [
         // lib — pure logic, all 100% enforced below
+        "lib/ai-gateway.ts",
         "lib/api/session.ts",
         "lib/capture.ts",
         "lib/care.ts",
         "lib/care-grouping.ts",
         "lib/env.ts",
+        "lib/invites.ts",
         "lib/lifewalk-parse.ts",
         "lib/lifewalk-prompt.ts",
         "lib/offer.ts",
@@ -31,10 +37,13 @@ export default defineConfig({
         "lib/thing-persistence.ts",
         "lib/things-service.ts",
         // api routes — 100% enforced below
+        "app/api/account/route.ts",
+        "app/api/ai-key/route.ts",
         "app/api/capture/voice/route.ts",
         "app/api/care-groups/report/route.ts",
         "app/api/care-plans/[id]/route.ts",
         "app/api/entities/route.ts",
+        "app/api/integrations/route.ts",
         "app/api/lifewalk/route.ts",
         "app/api/offer/route.ts",
         "app/api/push/subscribe/route.ts",
