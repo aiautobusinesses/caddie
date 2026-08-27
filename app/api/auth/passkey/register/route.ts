@@ -116,22 +116,28 @@ export async function POST(request: Request) {
     )
   }
 
-  // Upsert credential — one passkey per user
+  // Replace any existing credential for this user (one passkey per user).
+  // Delete first so the insert always works regardless of unique constraint state.
+  await service
+    .from("passkey_credentials")
+    .delete()
+    .eq("user_id", user.id)
+
   const { error: storeErr } = await service
     .from("passkey_credentials")
-    .upsert(
-      {
-        user_id: user.id,
-        credential_id: body.credentialId,
-        public_key_spki: publicKeyCose,
-        sign_count: 0,
-      },
-      { onConflict: "user_id" },
-    )
+    .insert({
+      user_id: user.id,
+      credential_id: body.credentialId,
+      public_key_spki: publicKeyCose,
+      sign_count: 0,
+    })
 
   if (storeErr) {
-    console.error("[passkey register]", storeErr)
-    return NextResponse.json({ error: "Failed to store credential" }, { status: 500 })
+    console.error("[passkey register] insert error:", JSON.stringify(storeErr))
+    return NextResponse.json(
+      { error: `Failed to store credential: ${storeErr.message}` },
+      { status: 500 },
+    )
   }
 
   return NextResponse.json({ ok: true })
