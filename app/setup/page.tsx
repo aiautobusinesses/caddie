@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 
 export default function SetupPage() {
   const router = useRouter()
@@ -85,6 +86,16 @@ export default function SetupPage() {
           </a>
           . Usage is charged to your account directly.
         </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            void createClient().auth.signOut().then(() => router.push("/auth"))
+          }}
+          className="w-full text-xs text-dim hover:text-muted transition-colors mt-8 text-center"
+        >
+          Sign out
+        </button>
       </div>
     </div>
   )

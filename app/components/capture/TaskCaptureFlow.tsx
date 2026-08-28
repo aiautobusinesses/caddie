@@ -12,6 +12,8 @@ type TaskCaptureFlowProps = {
   variant: "lifewalk" | "capture"
   onSaved: () => void | Promise<void>
   onClose?: () => void
+  /** Back button shown in lifewalk header when entered from settings */
+  onBack?: () => void
 }
 
 // Normalise the vendor-prefixed SpeechRecognition constructor.
@@ -31,6 +33,7 @@ export default function TaskCaptureFlow({
   variant,
   onSaved,
   onClose,
+  onBack,
 }: TaskCaptureFlowProps) {
   const [stage, setStage] = useState<Stage>("narrate")
   const [transcript, setTranscript] = useState("")
@@ -149,16 +152,30 @@ export default function TaskCaptureFlow({
     return (
       <div className={isOnboarding ? "flex flex-col items-center justify-center min-h-dvh px-6" : "px-6 py-8"}>
         <div className="w-full max-w-sm mx-auto">
-          {onClose && (
-            <div className="flex justify-end mb-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted text-sm flex items-center justify-center"
-                aria-label="Close"
-              >
-                ×
-              </button>
+          {(onClose ?? onBack) && (
+            <div className="flex justify-between mb-4">
+              {onBack ? (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted flex items-center justify-center"
+                  aria-label="Back"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 3L5 8l5 5" />
+                  </svg>
+                </button>
+              ) : <span />}
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-8 h-8 rounded-full bg-dim/50 hover:bg-border text-muted text-sm flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              )}
             </div>
           )}
           {isOnboarding ? (

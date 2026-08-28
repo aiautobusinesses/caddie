@@ -110,7 +110,10 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
         <button
           type="button"
           onClick={() => {
-            if (screen === "settings") void refreshOffer()
+            if (screen !== "offer") {
+              setScreen("offer")
+              void refreshOffer()
+            }
           }}
           className={`flex-1 text-left px-5 py-3.5 pb-[22px] text-xs font-bold uppercase tracking-[0.08em] border-r-2 border-border transition-colors hover:bg-surface ${screen !== "settings" ? "text-fg" : "text-muted"}`}
         >

@@ -140,7 +140,7 @@ export default function SettingsScreen() {
         {/* Do another life walk */}
         <button
           type="button"
-          onClick={() => router.push("/lifewalk")}
+          onClick={() => router.push("/lifewalk?from=settings")}
           className="block w-full text-left px-6 py-4 border-b border-border text-md font-semibold text-fg hover:bg-surface transition-colors"
         >
           Do another life walk

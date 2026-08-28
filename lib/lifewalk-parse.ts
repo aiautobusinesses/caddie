@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { parseRecurrenceRule, normalizeDateOnly } from "@/lib/recurrence"
 import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass, StepBand, StepMode, StepShape } from "@/lib/tasks"
 import { isTaskUrgency } from "@/lib/tasks"
-import { LIFEWALK_MODEL, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
+import { getLifewalkModel, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
 
 // ---------------------------------------------------------------------------
 // JSON extraction
@@ -162,7 +162,7 @@ export async function extractThingsFromNarration(
   let message: Anthropic.Message
   try {
     message = await client.messages.create({
-      model: LIFEWALK_MODEL,
+      model: getLifewalkModel(),
       max_tokens: 8096,
       temperature: 0.2,
       system: LIFEWALK_EXTRACTION_PROMPT,

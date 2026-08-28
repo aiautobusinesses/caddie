@@ -1,8 +1,23 @@
 /**
  * Shared extraction prompt for Life Walk narration → things/steps.
  * Used by both the Life Walk route and the voice capture webhook.
+ *
+ * Model selection:
+ *   Set ANTHROPIC_MODEL in your environment to override the default without
+ *   a code change. This is the recommended way to handle model version
+ *   upgrades (e.g. when haiku-4-5 is retired in favour of a newer version).
+ *
+ *   Example .env.local:
+ *     ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+ *
+ *   If unset, falls back to the constant below.
  */
-export const LIFEWALK_MODEL = "claude-haiku-4-5"
+export const LIFEWALK_MODEL_DEFAULT = "claude-haiku-4-5"
+
+/** Returns the active model name — env override takes precedence. */
+export function getLifewalkModel(): string {
+  return process.env.ANTHROPIC_MODEL?.trim() || LIFEWALK_MODEL_DEFAULT
+}
 
 export const LIFEWALK_EXTRACTION_PROMPT = `You are helping someone manage their life admin. They have narrated a walk around their home and life, describing things they notice that need doing.
 
