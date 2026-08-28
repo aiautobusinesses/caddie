@@ -178,6 +178,14 @@ export async function extractThingsFromNarration(
       throw new Error("AI request timed out. Try again.")
     }
     if (error instanceof Anthropic.APIError) {
+      if (isModelDeprecatedError(error)) {
+        const model = getLifewalkModel()
+        console.error(`[lifewalk-parse] model deprecated: ${model}`, error.message)
+        throw new Error(
+          `The AI model "${model}" has been retired by Anthropic. ` +
+          `Set the ANTHROPIC_MODEL environment variable to a current model name to fix this.`,
+        )
+      }
       throw error
     }
     throw new Error(error instanceof Error ? error.message : "AI request failed")
@@ -203,4 +211,19 @@ export async function extractThingsFromNarration(
       isParseError ? "Could not parse your narration. Try again or shorten it." : msg,
     )
   }
+}
+
+// ---------------------------------------------------------------------------
+// Model deprecation detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when an Anthropic API error indicates the requested model has
+ * been deprecated/retired. Anthropic returns HTTP 400 with an
+ * invalid_request_error whose message contains "deprecated" or "retired".
+ */
+function isModelDeprecatedError(error: InstanceType<typeof Anthropic.APIError>): boolean {
+  if (error.status !== 400) return false
+  const msg = error.message?.toLowerCase() ?? ""
+  return msg.includes("deprecated") || msg.includes("retired") || msg.includes("no longer available")
 }
