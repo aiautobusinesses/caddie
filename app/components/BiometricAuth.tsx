@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   authenticateWithPasskey,
   isPasskeySupported,
@@ -17,10 +17,13 @@ export default function BiometricAuth({ onSuccess, onFallback }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (!isPasskeySupported()) {
-    onFallback()
-    return null
-  }
+  // Never call parent callbacks synchronously during render — use an effect.
+  useEffect(() => {
+    if (!isPasskeySupported()) onFallback()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (!isPasskeySupported()) return null
 
   async function handleBiometric() {
     setLoading(true)
