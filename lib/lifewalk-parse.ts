@@ -163,7 +163,7 @@ export async function extractThingsFromNarration(
   try {
     message = await client.messages.create({
       model: LIFEWALK_MODEL,
-      max_tokens: 4096,
+      max_tokens: 8096,
       temperature: 0.2,
       system: LIFEWALK_EXTRACTION_PROMPT,
       messages: [
@@ -172,7 +172,7 @@ export async function extractThingsFromNarration(
           content: `Narration:\n${text.trim()}`,
         },
       ],
-    }, { signal: AbortSignal.timeout(30_000) })
+    }, { signal: AbortSignal.timeout(60_000) })
   } catch (error) {
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
       throw new Error("AI request timed out. Try again.")
@@ -192,6 +192,9 @@ export async function extractThingsFromNarration(
     return parseLifeWalkThingsFromModelText(textBlock.text)
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Could not parse things"
+    // Log the raw model output so we can diagnose what went wrong
+    console.error("[lifewalk-parse] model text:", textBlock.text.slice(0, 500))
+    console.error("[lifewalk-parse] parse error:", msg)
     const isParseError =
       msg.includes("JSON") ||
       msg.includes("No valid things") ||

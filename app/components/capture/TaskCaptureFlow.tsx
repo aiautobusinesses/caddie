@@ -42,13 +42,10 @@ export default function TaskCaptureFlow({
   const [speechSupported] = useState(() => getSpeechRecognition() !== null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
+  // Tracks whether the user explicitly stopped (vs browser ending on silence)
+  const userStoppedRef = useRef(false)
 
-  function toggleListening() {
-    if (listening) {
-      recognitionRef.current?.stop()
-      return
-    }
-
+  function startRecognition() {
     const SR = getSpeechRecognition()
     if (!SR) return
 
@@ -67,16 +64,42 @@ export default function TaskCaptureFlow({
       setTranscript((prev) => (prev ? `${prev} ${appended}` : appended))
     }
 
-    recognition.onerror = () => {
+    recognition.onerror = (event: { error: string }) => {
+      // "no-speech" and "audio-capture" are recoverable — restart unless user stopped
+      if (!userStoppedRef.current && event.error !== "not-allowed" && event.error !== "service-not-allowed") {
+        return // onend will fire next and trigger restart
+      }
       setListening(false)
     }
 
     recognition.onend = () => {
+      // Android Chrome ends recognition after a few seconds of silence even
+      // with continuous=true. Restart automatically unless the user stopped.
+      if (!userStoppedRef.current) {
+        try {
+          recognition.start()
+          return
+        } catch {
+          // Already started or unavailable — fall through to stop
+        }
+      }
       setListening(false)
     }
 
     recognitionRef.current = recognition
     recognition.start()
+  }
+
+  function toggleListening() {
+    if (listening) {
+      userStoppedRef.current = true
+      recognitionRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    userStoppedRef.current = false
+    startRecognition()
     setListening(true)
   }
 
