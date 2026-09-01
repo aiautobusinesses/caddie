@@ -35,16 +35,17 @@ describe("ServiceError", () => {
 // ── markThingStillGoing ───────────────────────────────────────────────────────
 
 describe("markThingStillGoing", () => {
-  // markThingStillGoing now:
+  // markThingStillGoing:
   // 1. SELECTs the thing to get live_step_id
   // 2. UPDATEs started_at = null
-  // 3. INSERTs a stopped event (fire-and-forget if live_step_id is present)
+  // 3. Awaits INSERT of a stopped event (throws on error if live_step_id is present)
 
   function makeStillGoingSupabase({
     liveStepId = "s1",
     updateError = null as { message: string } | null,
+    insertError = null as { message: string } | null,
   } = {}) {
-    const insertFn = vi.fn(async () => ({ error: null }))
+    const insertFn = vi.fn(async () => ({ error: insertError }))
     let callCount = 0
     const from = vi.fn(() => {
       callCount++
@@ -70,7 +71,7 @@ describe("markThingStillGoing", () => {
           })),
         }
       }
-      // INSERT stopped event (fire-and-forget)
+      // INSERT stopped event (awaited)
       return { insert: insertFn }
     })
     return { supabase: { from } as unknown as Parameters<typeof markThingStillGoing>[0], insertFn }
@@ -85,8 +86,6 @@ describe("markThingStillGoing", () => {
   it("writes a stopped event against the live step", async () => {
     const { supabase, insertFn } = makeStillGoingSupabase({ liveStepId: "s1" })
     await markThingStillGoing(supabase, "t1", "u1")
-    // Allow the fire-and-forget to resolve
-    await Promise.resolve()
     expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
       step_id: "s1",
       thing_id: "t1",
@@ -97,13 +96,17 @@ describe("markThingStillGoing", () => {
   it("skips the stopped event insert when there is no live step", async () => {
     const { supabase, insertFn } = makeStillGoingSupabase({ liveStepId: null as unknown as string })
     await markThingStillGoing(supabase, "t1", "u1")
-    await Promise.resolve()
     expect(insertFn).not.toHaveBeenCalled()
   })
 
-  it("throws on DB error", async () => {
+  it("throws on update DB error", async () => {
     const { supabase } = makeStillGoingSupabase({ updateError: { message: "db error" } })
     await expect(markThingStillGoing(supabase, "t1", "u1")).rejects.toThrow("db error")
+  })
+
+  it("throws on stopped event insert error", async () => {
+    const { supabase } = makeStillGoingSupabase({ insertError: { message: "insert error" } })
+    await expect(markThingStillGoing(supabase, "t1", "u1")).rejects.toThrow("insert error")
   })
 })
 

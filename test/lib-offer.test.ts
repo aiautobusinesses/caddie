@@ -85,11 +85,12 @@ describe("computeOffer", () => {
     expect(result.careGroup).toBeNull()
   })
 
-  it("in-progress thing with no live step falls back to thing name and thing_id for step_id", () => {
+  it("in-progress thing with no live step returns null inProgress — structurally invalid, cannot stop safely", () => {
+    // A thing with started_at but no live_step_id has no valid step to record a stopped event against.
+    // Returning null prevents the focus card from surfacing and avoids a 404 on stop.
     const thing = makeThing({ started_at: "2024-02-01T10:00:00Z", live_step_id: null, steps: [] })
     const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.inProgress?.step_name).toBe("Thing 1")
-    expect(result.inProgress?.step_id).toBe("t1")
+    expect(result.inProgress).toBeNull()
   })
 
   it("includes care group when not already offered today", () => {
@@ -210,9 +211,9 @@ describe("computeOffer — obligation reasons", () => {
     expect(result.offer).toHaveLength(0)
   })
 
-  it("excludes undated obligation from the offer entirely — it is neither clock-bearing nor a project", () => {
-    // An obligation without a due_date has no clock and is not a project.
-    // It must not appear in either bucket and must not suppress the care group.
+  it("undated obligation falls through to project pool and is offered on shape", () => {
+    // An obligation without a due_date has no clock but is still reachable — it falls
+    // through to the project pool and is offered on shape like any project.
     const thing = makeThing({
       class: "obligation",
       due_date: null,
@@ -220,11 +221,23 @@ describe("computeOffer — obligation reasons", () => {
       steps: [makeStep()],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer).toHaveLength(0)
+    expect(result.offer).toHaveLength(1)
+    expect(result.offer[0].thing_id).toBe("t1")
   })
 
-  it("undated obligation does not suppress care group", () => {
-    // Without a due_date it is not clock-bearing, so the care group slot stays open.
+  it("undated obligation has no reason line (no clock to describe)", () => {
+    const thing = makeThing({
+      class: "obligation",
+      due_date: null,
+      notify_window: null,
+      steps: [makeStep()],
+    })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0]?.reason).toBeNull()
+  })
+
+  it("undated obligation does not suppress care group — not clock-bearing", () => {
+    // Without a due_date it is not in the obligations slot, so the care group slot stays open.
     const plan = makePlan()
     const thing = makeThing({
       class: "obligation",

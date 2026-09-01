@@ -206,11 +206,16 @@ function buildInProgressThing(things: OfferThingRow[]): InProgressThing | null {
   if (!inProgress) return null
 
   const liveStep = inProgress.steps.find((step) => step.id === inProgress.live_step_id)
+  // If there is no live step the in-progress record is structurally invalid:
+  // any stop event sent against it would use a thing id as a step id and 404.
+  // Return null so the offer screen doesn't surface a broken focus card.
+  if (!liveStep) return null
+
   return {
     thing_id: inProgress.id,
     thing_name: inProgress.name,
-    step_id: liveStep?.id ?? inProgress.id,
-    step_name: liveStep?.name ?? inProgress.name,
+    step_id: liveStep.id,
+    step_name: liveStep.name,
     started_at: inProgress.started_at as string,
   }
 }
@@ -257,9 +262,11 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
     return daysBetween(today, thing.due_date) <= thing.notify_window
   })
 
-  // Projects: early-phase filter — skip unconfirmed needs_know_how steps.
-  // If filtering empties the pool, fall back to the unfiltered pool with generic names.
-  const allProjects = available.filter((thing) => thing.class === "project")
+  // Projects: obligations without a clock (no due_date / notify_window) fall through here
+  // and are offered on shape like any project. They have no reason line but are reachable.
+  const allProjects = available.filter(
+    (thing) => thing.class === "project" || (thing.class === "obligation" && (!thing.due_date || thing.notify_window == null))
+  )
 
   const filteredProjects = earlyPhase
     ? allProjects.filter((thing) => {

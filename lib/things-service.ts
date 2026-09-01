@@ -50,18 +50,18 @@ export async function markThingStillGoing(
     .eq("user_id", userId)
   if (error) throw new Error(error.message)
 
-  // Write the stopped event. Use live_step_id if available; fall back to a no-op
-  // (fire-and-forget insert on a synthetic id) only if the thing has no live step.
+  // Write the stopped event against the live step (if present).
+  // Awaited so that a DB failure surfaces rather than being swallowed silently.
   const stepId = (thing as { live_step_id: string | null } | null)?.live_step_id
   if (stepId) {
-    // Non-blocking: failure here is not fatal; the clear has already succeeded.
-    void supabase.from("step_events").insert({
+    const { error: eventError } = await supabase.from("step_events").insert({
       step_id: stepId,
       thing_id: thingId,
       user_id: userId,
       event_type: "stopped" as const,
       metadata: null,
     })
+    if (eventError) throw new Error(eventError.message)
   }
 
   return { ok: true, still_going: true }
