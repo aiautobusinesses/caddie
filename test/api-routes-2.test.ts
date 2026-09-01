@@ -675,7 +675,13 @@ describe("GET /auth/confirm", async () => {
     vi.mocked(acceptInvite).mockReset()
   })
 
-  it("redirects to /auth?error=auth_callback_failed when no code", async () => {
+  it("redirects to /auth?error=auth_callback_failed when neither code nor token_hash", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: {
+        exchangeCodeForSession: vi.fn(),
+        verifyOtp: vi.fn(),
+      },
+    } as unknown as Awaited<ReturnType<typeof createServerClient>>)
     const req = new Request("http://localhost/auth/confirm?next=/")
     const res = await GET(req)
     expect(res.status).toBe(307)
@@ -690,6 +696,7 @@ describe("GET /auth/confirm", async () => {
           error: null,
           data: { session: { user: fakeUser }, user: fakeUser },
         })),
+        verifyOtp: vi.fn(),
       },
     } as unknown as Awaited<ReturnType<typeof createServerClient>>)
     vi.mocked(acceptInvite).mockResolvedValue(null)
@@ -706,6 +713,7 @@ describe("GET /auth/confirm", async () => {
     vi.mocked(createServerClient).mockResolvedValue({
       auth: {
         exchangeCodeForSession: vi.fn(async () => ({ error: { message: "expired" }, data: { session: null } })),
+        verifyOtp: vi.fn(),
       },
     } as unknown as Awaited<ReturnType<typeof createServerClient>>)
 
@@ -719,10 +727,46 @@ describe("GET /auth/confirm", async () => {
     vi.mocked(createServerClient).mockResolvedValue({
       auth: {
         exchangeCodeForSession: vi.fn(async () => ({ error: null, data: { session: null } })),
+        verifyOtp: vi.fn(),
       },
     } as unknown as Awaited<ReturnType<typeof createServerClient>>)
 
     const req = new Request("http://localhost/auth/confirm?code=abc")
+    const res = await GET(req)
+    expect(res.status).toBe(307)
+    expect(res.headers.get("location")).toContain("auth_callback_failed")
+  })
+
+  it("redirects to next path on successful token_hash verification", async () => {
+    const fakeUser = { id: "u2", email: "token@example.com" }
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: {
+        exchangeCodeForSession: vi.fn(),
+        verifyOtp: vi.fn(async () => ({
+          error: null,
+          data: { session: { user: fakeUser }, user: fakeUser },
+        })),
+      },
+    } as unknown as Awaited<ReturnType<typeof createServerClient>>)
+    vi.mocked(acceptInvite).mockResolvedValue(null)
+
+    const req = new Request("http://localhost/auth/confirm?token_hash=xyz&type=email&next=/dashboard")
+    const res = await GET(req)
+
+    expect(res.status).toBe(307)
+    expect(res.headers.get("location")).toContain("/dashboard")
+    expect(vi.mocked(acceptInvite)).toHaveBeenCalledWith(expect.anything(), "u2", "token@example.com")
+  })
+
+  it("redirects to error page when token_hash verification fails", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: {
+        exchangeCodeForSession: vi.fn(),
+        verifyOtp: vi.fn(async () => ({ error: { message: "invalid" }, data: { session: null } })),
+      },
+    } as unknown as Awaited<ReturnType<typeof createServerClient>>)
+
+    const req = new Request("http://localhost/auth/confirm?token_hash=bad&type=email")
     const res = await GET(req)
     expect(res.status).toBe(307)
     expect(res.headers.get("location")).toContain("auth_callback_failed")
