@@ -200,6 +200,7 @@ describe("POST /api/lifewalk", async () => {
     vi.mocked(extractFromNarration).mockResolvedValue({
       things: things as unknown as ReturnType<typeof parseLifeWalkResultFromModelText>["things"],
       entities: [],
+      entities_dropped: 0,
     })
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(200)
@@ -217,7 +218,7 @@ describe("POST /api/lifewalk", async () => {
       intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
       tolerance_days: 2, overdue_days: 5,
     }
-    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity], entities_dropped: 0 })
     const res = await POST(jsonReq("http://localhost", { transcript: "water peace lily" }))
     expect(res.status).toBe(200)
     const data = await res.json()
@@ -238,12 +239,30 @@ describe("POST /api/lifewalk", async () => {
       intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
       tolerance_days: 2, overdue_days: 5,
     }
-    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity], entities_dropped: 0 })
     const res = await POST(jsonReq("http://localhost", { transcript: "water fern" }))
     expect(res.status).toBe(200)
     const data = await res.json()
     expect(data.entities).toEqual([])
     expect(data.entities_dropped).toBe(1)
+  })
+
+  it("includes parse-time drops in entities_dropped total", async () => {
+    const rpcFn = vi.fn(async () => ({ data: { entity_id: "e1", plan_id: "p1" }, error: null }))
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({ rpc: rpcFn }))
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    const entity = {
+      name: "Peace lily", kind: "plant", location: "bedroom", action: "Water",
+      intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    // Simulate one entity passing parse and one dropped at parse time (entities_dropped: 1)
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity], entities_dropped: 1 })
+    const res = await POST(jsonReq("http://localhost", { transcript: "two plants, one had bad intervals" }))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.entities).toHaveLength(1)
+    expect(data.entities_dropped).toBe(1) // parse-time drop only; RPC succeeded
   })
 
   it("returns 500 when AI returns no text block", async () => {
@@ -485,7 +504,7 @@ describe("POST /api/capture/voice", async () => {
   it("returns 422 when no things or entities extracted", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [], entities_dropped: 0 })
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(422)
   })
@@ -494,7 +513,7 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
-    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [], entities_dropped: 0 })
     vi.mocked(persistThings).mockResolvedValue({ saved: [{ thing_id: "t1", name: "T" }] })
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(201)
@@ -511,7 +530,7 @@ describe("POST /api/capture/voice", async () => {
       intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
       tolerance_days: 2, overdue_days: 5,
     }
-    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity], entities_dropped: 0 })
     vi.mocked(persistThings).mockResolvedValue({ saved: [] })
     // Override the service client's rpc for the entity insert
     const supabaseWithRpc = { ...makeServiceClient(), rpc: rpcFn }
@@ -526,7 +545,7 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
-    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [], entities_dropped: 0 })
     vi.mocked(persistThings).mockRejectedValue(new Error("save fail"))
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(500)
@@ -536,7 +555,7 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
-    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [] })
+    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [], entities_dropped: 0 })
     vi.mocked(persistThings).mockRejectedValue("raw")
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(500)

@@ -92,4 +92,10 @@ export type LifeWalkExtractedEntity = {
 export type LifeWalkExtractionResult = {
   things: LifeWalkExtractedThing[]
   entities: LifeWalkExtractedEntity[]
+  /**
+   * Number of entity items the model returned that were dropped during
+   * normalisation (e.g. malformed or incomplete intervals). Routes add their
+   * own RPC-failure drops to this before returning it to the client.
+   */
+  entities_dropped: number
 }

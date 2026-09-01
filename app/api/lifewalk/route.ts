@@ -95,12 +95,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { things, entities } = await extractFromNarration(gateway.client, transcript)
-    const { saved: savedEntities, dropped } = await saveEntities(auth.supabase, auth.user.id, entities)
+    const { things, entities, entities_dropped: parseDropped } = await extractFromNarration(gateway.client, transcript)
+    const { saved: savedEntities, dropped: saveDropped } = await saveEntities(auth.supabase, auth.user.id, entities)
+    const totalDropped = parseDropped + saveDropped
     return NextResponse.json({
       things,
       entities: savedEntities,
-      ...(dropped > 0 ? { entities_dropped: dropped } : {}),
+      ...(totalDropped > 0 ? { entities_dropped: totalDropped } : {}),
     })
   } catch (error) {
     if (error instanceof Anthropic.APIError) {

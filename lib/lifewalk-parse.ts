@@ -166,16 +166,24 @@ export function parseLifeWalkResultFromModelText(text: string): LifeWalkExtracti
   }
 
   const entities: LifeWalkExtractedEntity[] = []
+  let entities_dropped = 0
   for (const item of entityList) {
     const entity = normalizeEntity(item)
-    if (entity) entities.push(entity)
+    if (entity) {
+      entities.push(entity)
+    } else if (item !== null && item !== undefined) {
+      // Any non-null object that failed normalisation is a model output failure
+      // (missing name, bad intervals, etc.) and counts as a drop.
+      // null/undefined entries are structural JSON noise and don't count.
+      entities_dropped++
+    }
   }
 
   if (things.length === 0 && entities.length === 0) {
     throw new Error("No valid things in model response")
   }
 
-  return { things, entities }
+  return { things, entities, entities_dropped }
 }
 
 export { isTaskUrgency }

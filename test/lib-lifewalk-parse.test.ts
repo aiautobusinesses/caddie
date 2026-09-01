@@ -61,30 +61,45 @@ describe("parseLifeWalkResultFromModelText", () => {
     expect(result.entities).toHaveLength(1)
     expect(result.entities[0].name).toBe("Peace lily")
     expect(result.entities[0].intervals["1"]).toBe(14)
+    expect(result.entities_dropped).toBe(0)
   })
 
   it("accepts a payload with only things and an empty entities array", () => {
     const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [VALID_THING], entities: [] }))
     expect(result.things).toHaveLength(1)
     expect(result.entities).toHaveLength(0)
+    expect(result.entities_dropped).toBe(0)
   })
 
   it("accepts a payload with only entities and an empty things array", () => {
     const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [], entities: [VALID_ENTITY] }))
     expect(result.things).toHaveLength(0)
     expect(result.entities).toHaveLength(1)
+    expect(result.entities_dropped).toBe(0)
   })
 
-  it("silently drops an entity whose intervals are invalid", () => {
+  it("counts an entity with invalid intervals as a parse-time drop", () => {
+    // Eleven months instead of twelve — the realistic LLM failure case.
+    const elevenMonths = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [String(i + 1), 7]))
+    const bad = { ...VALID_ENTITY, intervals: elevenMonths }
+    const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [VALID_THING], entities: [bad] }))
+    expect(result.entities).toHaveLength(0)
+    expect(result.entities_dropped).toBe(1)
+  })
+
+  it("counts an entity with wrong interval value types as a parse-time drop", () => {
     const bad = { ...VALID_ENTITY, intervals: { "1": "not-a-number" } }
     const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [VALID_THING], entities: [bad] }))
     expect(result.entities).toHaveLength(0)
+    expect(result.entities_dropped).toBe(1)
   })
 
-  it("silently drops an entity with no name", () => {
+  it("counts a nameless entity as a parse-time drop", () => {
+    // A well-formed object with a blank name is still a model output failure.
     const bad = { ...VALID_ENTITY, name: "" }
     const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [VALID_THING], entities: [bad] }))
     expect(result.entities).toHaveLength(0)
+    expect(result.entities_dropped).toBe(1)
   })
 
   it("throws when both arrays are empty after normalisation", () => {
@@ -129,6 +144,7 @@ describe("extractFromNarration", () => {
     expect(result.things[0].name).toBe("Fix bike")
     expect(result.entities).toHaveLength(1)
     expect(result.entities[0].name).toBe("Peace lily")
+    expect(result.entities_dropped).toBe(0)
   })
 
   it("throws when the response has no text block", async () => {

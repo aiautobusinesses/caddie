@@ -38,6 +38,7 @@ export default function TaskCaptureFlow({
   const [stage, setStage] = useState<Stage>("narrate")
   const [transcript, setTranscript] = useState("")
   const [things, setThings] = useState<LifeWalkExtractedThing[]>([])
+  const [entitiesDropped, setEntitiesDropped] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [listening, setListening] = useState(false)
@@ -121,7 +122,8 @@ export default function TaskCaptureFlow({
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setThings(data.things)
+      setThings(data.things ?? [])
+      setEntitiesDropped(typeof data.entities_dropped === "number" ? data.entities_dropped : 0)
       setStage("review")
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong")
@@ -273,6 +275,11 @@ export default function TaskCaptureFlow({
         <h1 className="text-2xl font-semibold text-fg text-center mb-6">
           {things.length} {things.length === 1 ? "thing" : "things"}
         </h1>
+        {entitiesDropped > 0 && (
+          <p className="text-sm text-amber-500 text-center mb-4">
+            {entitiesDropped} {entitiesDropped === 1 ? "recurring item" : "recurring items"} couldn&apos;t be saved.
+          </p>
+        )}
         <div className="flex flex-col gap-3 mb-8">
           {things.map((thing, i) => (
             <SwipeableTaskRow

@@ -62,8 +62,9 @@ export async function POST(request: NextRequest) {
   // ── Extract things + entities via Claude ──────────────────────────────────
   let things: Awaited<ReturnType<typeof extractFromNarration>>["things"]
   let entities: Awaited<ReturnType<typeof extractFromNarration>>["entities"]
+  let entitiesDropped: number
   try {
-    ;({ things, entities } = await extractFromNarration(gateway.client, text))
+    ;({ things, entities, entities_dropped: entitiesDropped } = await extractFromNarration(gateway.client, text))
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI request failed"
     return NextResponse.json({ error: msg }, { status: 502 })
@@ -76,10 +77,11 @@ export async function POST(request: NextRequest) {
   // ── Persist via service role (integration context — no session cookie) ────
   try {
     const result = await persistThings(supabase, things, { source: "voice", userId })
-    const { dropped } = await saveEntities(supabase as unknown as SupabaseClient<Database>, userId, entities)
+    const { dropped: saveDropped } = await saveEntities(supabase as unknown as SupabaseClient<Database>, userId, entities)
+    const totalDropped = entitiesDropped + saveDropped
     return NextResponse.json({
       saved: result.saved,
-      ...(dropped > 0 ? { entities_dropped: dropped } : {}),
+      ...(totalDropped > 0 ? { entities_dropped: totalDropped } : {}),
     }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to save" }, { status: 500 })
