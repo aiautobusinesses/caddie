@@ -5,12 +5,14 @@ function makeSupabase(overrides: {
   things?: { data: unknown; error: unknown }
   carePlans?: { data: unknown; error: null }
   profile?: { data: unknown; error: null }
-  stepEvents?: { data: unknown; error: null }
+  doneEvents?: { data: unknown; error: null }
+  nudgedBackEvents?: { data: unknown; error: null }
 } = {}) {
   const things = overrides.things ?? { data: [], error: null }
   const carePlans = overrides.carePlans ?? { data: [], error: null }
   const profile = overrides.profile ?? { data: null, error: null }
-  const stepEvents = overrides.stepEvents ?? { data: [], error: null }
+  const doneEvents = overrides.doneEvents ?? { data: [], error: null }
+  const nudgedBackEvents = overrides.nudgedBackEvents ?? { data: [], error: null }
 
   const buildChain = (result: unknown) => {
     const chain: Record<string, unknown> = {}
@@ -28,7 +30,8 @@ function makeSupabase(overrides: {
     if (callCount === 1) return buildChain(things)
     if (callCount === 2) return buildChain(carePlans)
     if (callCount === 3) return buildChain(profile)
-    return buildChain(stepEvents)
+    if (callCount === 4) return buildChain(doneEvents)
+    return buildChain(nudgedBackEvents)
   })
 
   return { from: fromImpl } as unknown as Parameters<typeof loadOfferData>[0]
@@ -101,18 +104,32 @@ describe("loadOfferData", () => {
       notify_window: null, live_step_id: "s1", started_at: null,
       steps: [{ id: "s1", name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false, step_order: 0, done: false }],
     }
-    const stepEvents = [
-      { event_type: "done", thing_id: "t1" },
-      { event_type: "done", thing_id: "t1" },
-      { event_type: "edited", thing_id: "t1" },
-    ]
     const supabase = makeSupabase({
       things: { data: [thing], error: null },
-      stepEvents: { data: stepEvents, error: null },
+      // Two done events — still under tenure threshold
+      doneEvents: { data: [{ id: "e1" }, { id: "e2" }], error: null },
     })
     const { result } = await loadOfferData(supabase, "u1")
-    // completionCount = 2 (both "done" events) — still under tenure threshold
-    // result should have an offer (thing is offerable)
+    // completionCount = 2 — still under tenure threshold, offer is present
     expect(result.offer).toHaveLength(1)
+  })
+
+  it("nudgeBackCounts counts only nudged_back events — not stopped, edited, or why", async () => {
+    // The old code counted every 'edited' event as a nudge-back, which meant three normal
+    // stops would trip the degradation threshold. Now only nudged_back counts.
+    const thing = {
+      id: "t1", name: "Test", class: "project", domain: "home", due_date: null,
+      notify_window: null, live_step_id: "s1", started_at: null,
+      steps: [{ id: "s1", name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false, step_order: 0, done: false }],
+    }
+    const supabase = makeSupabase({
+      things: { data: [thing], error: null },
+      // One genuine nudge-back — below the degradation threshold of 3
+      nudgedBackEvents: { data: [{ thing_id: "t1" }], error: null },
+    })
+    const { result } = await loadOfferData(supabase, "u1")
+    // nudgeBackCounts["t1"] = 1, which is below NUDGE_BACK_THRESHOLD (3)
+    // so the step name should be specific, not generic
+    expect(result.offer[0].step_name).toBe("Step")
   })
 })

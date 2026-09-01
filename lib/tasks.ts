@@ -15,42 +15,18 @@ export type StepInsert = Database["public"]["Tables"]["steps"]["Insert"]
 export type StepEventRow = Database["public"]["Tables"]["step_events"]["Row"]
 
 /**
- * Event inputs accepted by the API.
- *
- * Most application-layer values are stored in the DB as `"edited"` with a
- * `{ kind }` metadata discriminator.  `"stopped"` is also stored as `"edited"`
- * with `{ kind: "stopped" }` so that stop-note events sit naturally in the
- * event stream alongside other edits.
- *
- * The values beyond the core `EventType` enum are application-layer only and
- * are **not** DB enum values.
+ * All event types accepted by the API and written to the DB.
+ * Every value here is a real DB enum value — no more collapsing to "edited".
  */
-export type StepEventInput =
-  | EventType
-  | "offered"
-  | "accepted"
-  | "skipped"
-  | "nudged_back"
-  | "nudged_forward"
-  | "why"
-  | "stopped"
+export type StepEventInput = EventType
 
 const STEP_EVENT_INPUTS: readonly StepEventInput[] = [
   "done", "edited", "notified", "offered", "accepted",
-  "skipped", "nudged_back", "nudged_forward", "why", "stopped",
+  "skipped", "nudged_back", "nudged_forward", "stopped", "why",
 ]
 
 export function isStepEventInput(value: string): value is StepEventInput {
   return (STEP_EVENT_INPUTS as readonly string[]).includes(value)
-}
-
-export function resolveEventTypeForDb(eventType: StepEventInput): EventType {
-  if (eventType === "why") return "edited"
-  if (eventType === "stopped") return "edited"
-  // Application-layer values not in the DB enum are stored as "edited" with metadata.
-  const dbValues: readonly string[] = ["done", "edited", "notified"] satisfies EventType[]
-  if (dbValues.includes(eventType)) return eventType as EventType
-  return "edited"
 }
 
 /** Urgency labels used in Life Walk UI and Claude extraction. */

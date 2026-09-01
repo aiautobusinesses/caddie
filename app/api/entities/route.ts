@@ -28,8 +28,9 @@ export type SeedResponse = {
  * Body: { sentence: string }
  *
  * Calls the LLM to extract entity + care plan from a sentence like
- * "fiddle-leaf fig in the front room". Returns the entity and plan
- * for review before saving.
+ * "fiddle-leaf fig in the front room". Saves the entity and plan
+ * atomically, then returns the saved ids and plan details so the client
+ * can offer the user a chance to edit the plan after capture.
  */
 export async function POST(req: NextRequest) {
   const auth = await getAuthenticatedContext()

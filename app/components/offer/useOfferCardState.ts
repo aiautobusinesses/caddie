@@ -57,6 +57,7 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     setInProgress({
       thing_id: item.thing_id,
       thing_name: item.thing_name,
+      step_id: item.step_id,
       step_name: item.step_name,
       started_at: new Date().toISOString(),
     })
@@ -121,10 +122,7 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     setActionError(null)
 
     if (stillGoing) {
-      // Find the live step id from the current offer context.
-      // We don't have direct access to offer items here, so we use the thing_id
-      // as a fallback step_id if no live step is tracked separately.
-      const stepId = inProgress.thing_id  // best available without a separate step_id field
+      const stepId = inProgress.step_id
 
       // Record the stopped event immediately — fire and forget.
       void fetch(`/api/steps/${stepId}/event`, {

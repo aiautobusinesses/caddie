@@ -25,7 +25,7 @@ import {
   resolveInitialDueDates,
 } from "@/lib/recurrence"
 import { createClient as createServiceClient } from "@/lib/supabase/server-service"
-import { isTaskUrgency, isStepEventInput, resolveEventTypeForDb } from "@/lib/tasks"
+import { isTaskUrgency, isStepEventInput } from "@/lib/tasks"
 
 describe("care helpers", () => {
   it("parses valid monthly intervals and rejects invalid input", () => {
@@ -92,7 +92,7 @@ describe("care grouping", () => {
           id: "a",
           action: "Water",
           next_due_at: "2024-02-01",
-          entities: { id: "e1", name: "Fern", location: "front room", archived_at: null },
+          entities: { id: "e1", name: "Fern", kind: "plant", location: "front room", archived_at: null },
         },
         {
           ...base,
@@ -100,7 +100,7 @@ describe("care grouping", () => {
           entity_id: "e2",
           action: "Water",
           next_due_at: "2024-02-03",
-          entities: { id: "e2", name: "Palm", location: "front room", archived_at: null },
+          entities: { id: "e2", name: "Palm", kind: "plant", location: "front room", archived_at: null },
         },
       ],
       "2024-02-02",
@@ -121,7 +121,7 @@ describe("care grouping", () => {
           id: "c",
           action: "Feed",
           next_due_at: "2024-02-01",
-          entities: { id: "e3", name: "Orchid", location: null, archived_at: null },
+          entities: { id: "e3", name: "Orchid", kind: "plant", location: null, archived_at: null },
         },
       ],
       "2024-02-01",
@@ -143,8 +143,8 @@ describe("care grouping", () => {
     }
     const group = buildCareGroup(
       [
-        { ...base, id: "b", action: "Water", next_due_at: "2024-02-03", entities: { id: "e2", name: "Palm", location: null, archived_at: null } },
-        { ...base, id: "a", entity_id: "e1", action: "Water", next_due_at: "2024-02-01", entities: { id: "e1", name: "Fern", location: null, archived_at: null } },
+        { ...base, id: "b", action: "Water", next_due_at: "2024-02-03", entities: { id: "e2", name: "Palm", kind: "plant", location: null, archived_at: null } },
+        { ...base, id: "a", entity_id: "e1", action: "Water", next_due_at: "2024-02-01", entities: { id: "e1", name: "Fern", kind: "plant", location: null, archived_at: null } },
       ],
       "2024-02-05",
     )
@@ -165,52 +165,52 @@ describe("care grouping", () => {
           last_done_at: "2024-01-01",
           next_due_at: "2024-01-10",
           archived_at: null,
-          entities: { id: "e1", name: "Fern", location: null, archived_at: null },
+          entities: { id: "e1", name: "Fern", kind: "plant", location: null, archived_at: null },
         },
       ],
       "2024-01-20",
     )
 
-    expect(result?.reason).toBe("hasn't been watered in 19 days")
+    expect(result?.reason).toBe("hasn't been done in 19 days")
   })
 
-  it("uses 'hasn't been done in a while' when last_done_at is null in overdue group (care-grouping.ts:157)", () => {
+  it("uses 'hasn't been done in a while' when last_done_at is null in overdue group", () => {
     // buildOverdueReason: !anchor.last_done_at → true branch
     const result = buildCareGroup(
       [{
         id: "a", entity_id: "e1", action: "Feed", intervals: {}, tolerance_days: 0,
         overdue_days: 0, last_done_at: null, next_due_at: "2024-01-10", archived_at: null,
-        entities: { id: "e1", name: "Fern", location: null, archived_at: null },
+        entities: { id: "e1", name: "Fern", kind: "plant", location: null, archived_at: null },
       }],
       "2024-01-20",
     )
     expect(result?.reason).toBe("hasn't been done in a while")
   })
 
-  it("uses singular 'day' in overdue reason when exactly 1 day since last done (care-grouping.ts:162)", () => {
-    // buildOverdueReason: days === 1 → "" (singular)
+  it("uses singular 'day' in overdue reason when exactly 1 day since last done", () => {
+    // buildOverdueReason: days === 1 → singular "day"
     const result = buildCareGroup(
       [{
         id: "a", entity_id: "e1", action: "Water", intervals: {}, tolerance_days: 0,
         overdue_days: 0, last_done_at: "2024-01-19", next_due_at: "2024-01-10", archived_at: null,
-        entities: { id: "e1", name: "Fern", location: null, archived_at: null },
+        entities: { id: "e1", name: "Fern", kind: "plant", location: null, archived_at: null },
       }],
       "2024-01-20",
     )
-    expect(result?.reason).toBe("hasn't been watered in 1 day")
+    expect(result?.reason).toBe("hasn't been done in 1 day")
   })
 
-  it("builds title with 'things' for non-water multi-entity group (care-grouping.ts:131)", () => {
-    // anchor.action.toLowerCase() !== "water" → "things" suffix
+  it("builds title using entity kind for multi-entity group", () => {
+    // Title should use the entity kind, not a hardcoded noun.
     const base = { entity_id: "e1", intervals: {}, tolerance_days: 5, overdue_days: 1, last_done_at: null, archived_at: null }
     const result = buildCareGroup(
       [
-        { ...base, id: "a", action: "Feed", next_due_at: "2024-02-01", entities: { id: "e1", name: "Fern", location: "shelf", archived_at: null } },
-        { ...base, id: "b", entity_id: "e2", action: "Feed", next_due_at: "2024-02-02", entities: { id: "e2", name: "Palm", location: "shelf", archived_at: null } },
+        { ...base, id: "a", action: "Put out", next_due_at: "2024-02-01", entities: { id: "e1", name: "Recycling", kind: "bin", location: "kitchen", archived_at: null } },
+        { ...base, id: "b", entity_id: "e2", action: "Put out", next_due_at: "2024-02-02", entities: { id: "e2", name: "General", kind: "bin", location: "kitchen", archived_at: null } },
       ],
       "2024-02-05",
     )
-    expect(result?.title).toMatch(/things/)
+    expect(result?.title).toBe("Put out the kitchen bins")
   })
 
   it("deduplicates plans with same id in group (care-grouping.ts:108 false branch)", () => {
@@ -218,7 +218,7 @@ describe("care grouping", () => {
     const plan = {
       id: "a", entity_id: "e1", action: "Water", intervals: {}, tolerance_days: 5,
       overdue_days: 0, last_done_at: null, next_due_at: "2024-02-01", archived_at: null,
-      entities: { id: "e1", name: "Fern", location: null, archived_at: null },
+      entities: { id: "e1", name: "Fern", kind: "plant", location: null, archived_at: null },
     }
     const result = buildCareGroup([plan, plan], "2024-02-05")
     // Despite duplicate, only one member
@@ -443,10 +443,8 @@ describe("task and service helpers", () => {
   it("validates task enums", () => {
     expect(isStepEventInput("why")).toBe(true)
     expect(isStepEventInput("stopped")).toBe(true)
+    expect(isStepEventInput("nudged_back")).toBe(true)
     expect(isStepEventInput("bad")).toBe(false)
-    expect(resolveEventTypeForDb("why")).toBe("edited")
-    expect(resolveEventTypeForDb("stopped")).toBe("edited")
-    expect(resolveEventTypeForDb("done")).toBe("done")
     expect(isTaskUrgency("now")).toBe(true)
     expect(isTaskUrgency("later")).toBe(false)
   })

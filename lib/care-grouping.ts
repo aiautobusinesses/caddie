@@ -28,6 +28,7 @@ export type CarePlanRow = {
   entities: {
     id: string
     name: string
+    kind: string
     location: string | null
     archived_at: string | null
   }
@@ -128,9 +129,15 @@ export function buildCareGroup(
     title = `${anchor.action} ${members[0].entities.name}`
     if (location) title += ` (${location})`
   } else {
-    // e.g. "Water the front room plants"
+    // e.g. "Water the front room plants", "Put out the kitchen bins"
     const locationPart = location ? `the ${location} ` : "your "
-    title = `${anchor.action} ${locationPart}${anchor.action.toLowerCase() === "water" ? "plants" : "things"}`
+    // Use the entity kind from the anchor (e.g. "plant", "bin") pluralised simply.
+    // Kind is a short noun stored at capture time; appending "s" is sufficient for
+    // the common cases. A kind already plural (e.g. "bins") is stored as-is by the LLM.
+    const kindPlural = anchor.entities.kind.endsWith("s")
+      ? anchor.entities.kind
+      : `${anchor.entities.kind}s`
+    title = `${anchor.action} ${locationPart}${kindPlural}`
   }
 
   // Reason from the anchor
@@ -161,6 +168,6 @@ function buildOverdueReason(anchor: CarePlanRow, today: string): string {
   const days = Math.round(
     (new Date(today).getTime() - new Date(anchor.last_done_at).getTime()) / msPerDay,
   )
-  return `hasn't been ${anchor.action.toLowerCase()}ed in ${days} day${days === 1 ? "" : "s"}`
+  return `hasn't been done in ${days} day${days === 1 ? "" : "s"}`
 }
 

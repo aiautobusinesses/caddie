@@ -1,4 +1,4 @@
-import { isStepEventInput, resolveEventTypeForDb } from "@/lib/tasks"
+import { isStepEventInput } from "@/lib/tasks"
 import type { Json } from "@/lib/database.types"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
@@ -28,18 +28,42 @@ export type MarkThingStillGoingResult = {
 
 /**
  * Clear started_at without marking done — keeps the thing in the offer pool.
+ * Writes a `stopped` event against the live step so the session is recorded.
  */
 export async function markThingStillGoing(
   supabase: SupabaseClient<Database>,
   thingId: string,
   userId: string,
 ): Promise<MarkThingStillGoingResult> {
+  // Fetch the live step id before clearing started_at.
+  const { data: thing } = await supabase
+    .from("things")
+    .select("live_step_id")
+    .eq("id", thingId)
+    .eq("user_id", userId)
+    .single()
+
   const { error } = await supabase
     .from("things")
     .update({ started_at: null })
     .eq("id", thingId)
     .eq("user_id", userId)
   if (error) throw new Error(error.message)
+
+  // Write the stopped event. Use live_step_id if available; fall back to a no-op
+  // (fire-and-forget insert on a synthetic id) only if the thing has no live step.
+  const stepId = (thing as { live_step_id: string | null } | null)?.live_step_id
+  if (stepId) {
+    // Non-blocking: failure here is not fatal; the clear has already succeeded.
+    void supabase.from("step_events").insert({
+      step_id: stepId,
+      thing_id: thingId,
+      user_id: userId,
+      event_type: "stopped" as const,
+      metadata: null,
+    })
+  }
+
   return { ok: true, still_going: true }
 }
 
@@ -80,14 +104,12 @@ export type RecordStepEventInput = {
  * Validate, record, and apply side-effects for a step event.
  * Returns { ok: true } on success; throws on invalid input or DB error.
  *
+ * Every event type is a real DB enum value — no collapsing to "edited".
+ * `why` events merge caller-supplied metadata with a kind discriminator so
+ * the content (the user's reason) is preserved alongside the type marker.
+ *
  * For `done` events, delegates to the `record_step_event_done` RPC which
  * marks the step done and advances the thing's live_step_id atomically.
- *
- * For `stopped` events, stores as `event_type="edited"` with
- * `{ kind: "stopped", ...note/photo }` metadata — see resolveEventTypeForDb.
- *
- * All other application-layer event types (offered, accepted, skipped, etc.)
- * are stored as `event_type="edited"` with `{ kind }` metadata.
  */
 export async function recordStepEvent(
   supabase: SupabaseClient<Database>,
@@ -116,9 +138,8 @@ export async function recordStepEvent(
     step_order: number
   }
 
-  const dbEventType = resolveEventTypeForDb(input.event_type)
-
-  // For `why` events, merge metadata with a `kind` discriminator.
+  // For `why` events, merge caller-supplied metadata with a kind discriminator
+  // so the user's reason text travels with the event type.
   const metadata: Json =
     input.event_type === "why"
       ? ({
@@ -137,7 +158,7 @@ export async function recordStepEvent(
       step_id: stepId,
       thing_id: step.thing_id,
       user_id: userId,
-      event_type: dbEventType,
+      event_type: input.event_type,
       metadata,
     })
     if (eventError) throw new Error(eventError.message)

@@ -32,6 +32,7 @@ export type CareGroupOffer = {
 export type InProgressThing = {
   thing_id: string
   thing_name: string
+  step_id: string
   step_name: string
   started_at: string
 }
@@ -119,8 +120,7 @@ function buildReason(
   today: string,
   earlyPhase: boolean,
 ): string | null {
-  if (earlyPhase) return null
-
+  // Obligation due-dates are real facts, not invented — show them regardless of tenure.
   if (thing.class === "obligation" && thing.due_date) {
     const days = daysBetween(today, thing.due_date)
     if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`
@@ -128,6 +128,9 @@ function buildReason(
     if (days === 1) return "due tomorrow"
     return `due in ${days} days`
   }
+
+  // Early phase: degrade to generic for everything else — don't invent specifics.
+  if (earlyPhase) return null
 
   // Non-clock reason for projects — never urgency language.
   if (step?.band === "short") return "quick one"
@@ -206,6 +209,7 @@ function buildInProgressThing(things: OfferThingRow[]): InProgressThing | null {
   return {
     thing_id: inProgress.id,
     thing_name: inProgress.name,
+    step_id: liveStep?.id ?? inProgress.id,
     step_name: liveStep?.name ?? inProgress.name,
     started_at: inProgress.started_at as string,
   }
@@ -249,7 +253,7 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
 
   const obligations = available.filter((thing) => {
     if (thing.class !== "obligation") return false
-    if (!thing.due_date || thing.notify_window == null) return true
+    if (!thing.due_date || thing.notify_window == null) return false
     return daysBetween(today, thing.due_date) <= thing.notify_window
   })
 

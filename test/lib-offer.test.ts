@@ -52,7 +52,7 @@ function makePlan(overrides: Partial<CarePlanRow> = {}): CarePlanRow {
     last_done_at: "2024-01-01",
     next_due_at: "2024-02-01",
     archived_at: null,
-    entities: { id: "e1", name: "Fern", location: "kitchen", archived_at: null },
+    entities: { id: "e1", name: "Fern", kind: "plant", location: "kitchen", archived_at: null },
     ...overrides,
   }
 }
@@ -80,15 +80,16 @@ describe("computeOffer", () => {
     const thing = makeThing({ started_at: "2024-02-01T10:00:00Z" })
     const plan = makePlan()
     const result = computeOffer({ ...baseInput, things: [thing], carePlans: [plan] })
-    expect(result.inProgress).toMatchObject({ thing_id: "t1", thing_name: "Thing 1", step_name: "Step 1" })
+    expect(result.inProgress).toMatchObject({ thing_id: "t1", thing_name: "Thing 1", step_id: "s1", step_name: "Step 1" })
     expect(result.offer).toEqual([])
     expect(result.careGroup).toBeNull()
   })
 
-  it("in-progress thing with no live step falls back to thing name", () => {
+  it("in-progress thing with no live step falls back to thing name and thing_id for step_id", () => {
     const thing = makeThing({ started_at: "2024-02-01T10:00:00Z", live_step_id: null, steps: [] })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.inProgress?.step_name).toBe("Thing 1")
+    expect(result.inProgress?.step_id).toBe("t1")
   })
 
   it("includes care group when not already offered today", () => {
@@ -209,7 +210,9 @@ describe("computeOffer — obligation reasons", () => {
     expect(result.offer).toHaveLength(0)
   })
 
-  it("includes obligation when due_date is null (no window to check)", () => {
+  it("excludes undated obligation from the offer entirely — it is neither clock-bearing nor a project", () => {
+    // An obligation without a due_date has no clock and is not a project.
+    // It must not appear in either bucket and must not suppress the care group.
     const thing = makeThing({
       class: "obligation",
       due_date: null,
@@ -217,8 +220,20 @@ describe("computeOffer — obligation reasons", () => {
       steps: [makeStep()],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer).toHaveLength(1)
-    expect(result.offer[0].reason).toBeNull()
+    expect(result.offer).toHaveLength(0)
+  })
+
+  it("undated obligation does not suppress care group", () => {
+    // Without a due_date it is not clock-bearing, so the care group slot stays open.
+    const plan = makePlan()
+    const thing = makeThing({
+      class: "obligation",
+      due_date: null,
+      notify_window: null,
+      steps: [makeStep()],
+    })
+    const result = computeOffer({ ...baseInput, things: [thing], carePlans: [plan] })
+    expect(result.careGroup).not.toBeNull()
   })
 })
 
@@ -265,12 +280,13 @@ describe("computeOffer — one clock slot", () => {
   })
 
   it("obligation present suppresses care group — they share the one clock slot", () => {
+    // Obligation must have both due_date and notify_window to be clock-bearing.
     const plan = makePlan()
     const obligation = makeThing({
       id: "to",
       class: "obligation",
       due_date: "2024-02-01",
-      notify_window: null,
+      notify_window: 10,
       steps: [makeStep()],
     })
     const result = computeOffer({ ...baseInput, things: [obligation], carePlans: [plan] })
@@ -396,11 +412,22 @@ describe("isEarlyPhase", () => {
 })
 
 describe("computeOffer — tenure gate", () => {
-  it("degrades to generic reason lines in early phase (returns null reason)", () => {
+  it("shows obligation due-date reason in early phase — real dates are not invented", () => {
+    // Early phase must not suppress obligation reasons: a stored due_date is a fact.
     const thing = makeThing({
       class: "obligation",
       due_date: "2024-02-05",
       notify_window: 30,
+      steps: [makeStep({ band: "short" })],
+    })
+    const result = computeOffer({ ...baseInput, completionCount: 0, things: [thing] })
+    expect(result.offer[0].reason).toBe("due in 4 days")
+  })
+
+  it("degrades project reason to null in early phase", () => {
+    // Early phase suppression still applies to projects — no invented specifics.
+    const thing = makeThing({
+      class: "project",
       steps: [makeStep({ band: "short" })],
     })
     const result = computeOffer({ ...baseInput, completionCount: 0, things: [thing] })
@@ -455,7 +482,7 @@ describe("computeOffer — tenure gate", () => {
     const thing = makeThing({
       class: "obligation",
       due_date: "2024-02-01",
-      notify_window: null,
+      notify_window: 10,
       steps: [makeStep()],
     })
     const result = computeOffer({ ...baseInput, completionCount: TENURE_THRESHOLD, things: [thing] })

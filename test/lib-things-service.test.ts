@@ -35,29 +35,74 @@ describe("ServiceError", () => {
 // ── markThingStillGoing ───────────────────────────────────────────────────────
 
 describe("markThingStillGoing", () => {
-  it("clears started_at and returns result", async () => {
-    const eqFn = vi.fn(async () => ({ error: null }))
-    const supabase = {
-      from: vi.fn(() => ({
-        update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: eqFn })) })),
-      })),
-    } as unknown as Parameters<typeof markThingStillGoing>[0]
+  // markThingStillGoing now:
+  // 1. SELECTs the thing to get live_step_id
+  // 2. UPDATEs started_at = null
+  // 3. INSERTs a stopped event (fire-and-forget if live_step_id is present)
 
+  function makeStillGoingSupabase({
+    liveStepId = "s1",
+    updateError = null as { message: string } | null,
+  } = {}) {
+    const insertFn = vi.fn(async () => ({ error: null }))
+    let callCount = 0
+    const from = vi.fn(() => {
+      callCount++
+      if (callCount === 1) {
+        // SELECT live_step_id
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({ data: { live_step_id: liveStepId }, error: null })),
+              })),
+            })),
+          })),
+        }
+      }
+      if (callCount === 2) {
+        // UPDATE started_at = null
+        return {
+          update: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(async () => ({ error: updateError })),
+            })),
+          })),
+        }
+      }
+      // INSERT stopped event (fire-and-forget)
+      return { insert: insertFn }
+    })
+    return { supabase: { from } as unknown as Parameters<typeof markThingStillGoing>[0], insertFn }
+  }
+
+  it("clears started_at and returns result", async () => {
+    const { supabase } = makeStillGoingSupabase()
     const result = await markThingStillGoing(supabase, "t1", "u1")
     expect(result).toEqual({ ok: true, still_going: true })
-    expect(eqFn).toHaveBeenCalled()
+  })
+
+  it("writes a stopped event against the live step", async () => {
+    const { supabase, insertFn } = makeStillGoingSupabase({ liveStepId: "s1" })
+    await markThingStillGoing(supabase, "t1", "u1")
+    // Allow the fire-and-forget to resolve
+    await Promise.resolve()
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+      step_id: "s1",
+      thing_id: "t1",
+      event_type: "stopped",
+    }))
+  })
+
+  it("skips the stopped event insert when there is no live step", async () => {
+    const { supabase, insertFn } = makeStillGoingSupabase({ liveStepId: null as unknown as string })
+    await markThingStillGoing(supabase, "t1", "u1")
+    await Promise.resolve()
+    expect(insertFn).not.toHaveBeenCalled()
   })
 
   it("throws on DB error", async () => {
-    const supabase = {
-      from: vi.fn(() => ({
-        update: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(async () => ({ error: { message: "db error" } })),
-          })),
-        })),
-      })),
-    } as unknown as Parameters<typeof markThingStillGoing>[0]
+    const { supabase } = makeStillGoingSupabase({ updateError: { message: "db error" } })
     await expect(markThingStillGoing(supabase, "t1", "u1")).rejects.toThrow("db error")
   })
 })
@@ -143,7 +188,7 @@ describe("recordStepEvent", () => {
     expect(result).toEqual({ ok: true })
   })
 
-  it("inserts stopped event and returns ok", async () => {
+  it("inserts stopped event with event_type='stopped' — not collapsed to 'edited'", async () => {
     const insertFn = vi.fn(async () => ({ error: null }))
     const supabase = {
       from: vi.fn((table: string) => {
@@ -155,11 +200,10 @@ describe("recordStepEvent", () => {
     } as unknown as Parameters<typeof recordStepEvent>[0]
     const result = await recordStepEvent(supabase, "s1", "u1", { event_type: "stopped" })
     expect(result).toEqual({ ok: true })
-    // stopped is stored as "edited" in DB
-    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "edited" }))
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "stopped" }))
   })
 
-  it("inserts why event with enriched metadata", async () => {
+  it("inserts why event with event_type='why' and enriched metadata", async () => {
     const insertFn = vi.fn(async () => ({ error: null }))
     const supabase = {
       from: vi.fn((table: string) => {
@@ -170,7 +214,7 @@ describe("recordStepEvent", () => {
       }),
     } as unknown as Parameters<typeof recordStepEvent>[0]
     await recordStepEvent(supabase, "s1", "u1", { event_type: "why", metadata: { note: "too hard" } as unknown as import("@/lib/database.types").Json })
-    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "edited" }))
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "why" }))
   })
 
   it("handles why event with null metadata (non-object → spread is empty)", async () => {
@@ -184,7 +228,7 @@ describe("recordStepEvent", () => {
       }),
     } as unknown as Parameters<typeof recordStepEvent>[0]
     await recordStepEvent(supabase, "s1", "u1", { event_type: "why", metadata: null as unknown as import("@/lib/database.types").Json })
-    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "edited" }))
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "why" }))
   })
 
   it("handles why event with array metadata (array → spread is empty)", async () => {

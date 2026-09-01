@@ -4,12 +4,25 @@
  * Given a sentence like "fiddle-leaf fig in the front room", returns a
  * suggested entity + care plan. Never asserts certainty about a specific
  * plant's exact needs — always presents as an adjustable starting plan.
+ *
+ * Model selection:
+ *   Set ANTHROPIC_SEED_MODEL in your environment to override the default
+ *   without a code change — same pattern as ANTHROPIC_MODEL for the Life Walk.
+ *
+ *   Example .env.local:
+ *     ANTHROPIC_SEED_MODEL=claude-haiku-4-5-20251001
+ *
+ *   If unset, falls back to the constant below.
  */
 
 import Anthropic from "@anthropic-ai/sdk"
 
-export const SEED_MODEL = "claude-haiku-4-5"
-const MODEL = SEED_MODEL
+export const SEED_MODEL_DEFAULT = "claude-haiku-4-5"
+
+/** Returns the active seed model name — env override takes precedence. */
+export function getSeedModel(): string {
+  return process.env.ANTHROPIC_SEED_MODEL?.trim() || SEED_MODEL_DEFAULT
+}
 
 const SYSTEM_PROMPT = `You help people set up care schedules for their plants, appliances, and household items.
 
@@ -60,7 +73,7 @@ export async function seedCarePlan(
   let text: string
   try {
     const message = await client.messages.create({
-      model: MODEL,
+      model: getSeedModel(),
       max_tokens: 1024,
       temperature: 0.2,
       system: SYSTEM_PROMPT,

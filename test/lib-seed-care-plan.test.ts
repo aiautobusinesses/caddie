@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
-import { seedCarePlan } from "@/lib/seed-care-plan"
+import { seedCarePlan, getSeedModel, SEED_MODEL_DEFAULT } from "@/lib/seed-care-plan"
 import type Anthropic from "@anthropic-ai/sdk"
 
 // Mock Anthropic at module level so hoisting works correctly
@@ -218,5 +218,26 @@ describe("seedCarePlan", () => {
     if (!("error" in result)) {
       expect(result.note).toBeNull()
     }
+  })
+})
+
+describe("getSeedModel", () => {
+  it("returns the default when ANTHROPIC_SEED_MODEL is not set", () => {
+    const original = process.env.ANTHROPIC_SEED_MODEL
+    delete process.env.ANTHROPIC_SEED_MODEL
+    expect(getSeedModel()).toBe(SEED_MODEL_DEFAULT)
+    process.env.ANTHROPIC_SEED_MODEL = original
+  })
+
+  it("returns the env override when ANTHROPIC_SEED_MODEL is set", () => {
+    const original = process.env.ANTHROPIC_SEED_MODEL
+    process.env.ANTHROPIC_SEED_MODEL = "claude-test-seed-override"
+    expect(getSeedModel()).toBe("claude-test-seed-override")
+    process.env.ANTHROPIC_SEED_MODEL = original
+  })
+
+  it("SEED_MODEL_DEFAULT is a non-empty string", () => {
+    expect(typeof SEED_MODEL_DEFAULT).toBe("string")
+    expect(SEED_MODEL_DEFAULT.length).toBeGreaterThan(0)
   })
 })
