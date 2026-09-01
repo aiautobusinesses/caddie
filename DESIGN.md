@@ -392,7 +392,7 @@ Life Walk extraction must output a nested structure (thing + ordered steps) rath
 
 **Cases:** multi-step project (cracked bath panel); single-step obligation (MOT due 14 March); recurring maintenance (peace lily, seasonal watering); ambiguous ("the garage is a complete state").
 
-**Results.** Multi-step: one-pass produced 6 steps in correct order including a waiting step correctly flagged `bleeds`; two-pass produced 5, collapsing measure-and-order and mis-flagging the mould treatment as `clean`. Obligation: one-pass set the due date correctly; two-pass produced a malformed recurrence rule with null fields and lost the date. Recurring: identical output — **stale, and must be re-run.** Both passes produced a recurrence rule on the step, which is the model now being removed; under the new model this case should produce an entity plus a care plan, and neither pass has been tested against that shape. Ambiguous: one-pass produced 3 restrained steps; two-pass produced 6, inventing a spurious monthly maintenance obligation not present in the narration.
+**Results.** Multi-step: one-pass produced 6 steps in correct order including a waiting step correctly flagged `bleeds`; two-pass produced 5, collapsing measure-and-order and mis-flagging the mould treatment as `clean`. Obligation: one-pass set the due date correctly; two-pass produced a malformed recurrence rule with null fields and lost the date. Recurring: the original result is stale — both passes produced a recurrence rule on the step, which has since been removed from the schema. The extraction pipeline now produces entity + care plan for recurring items (migration 009, prompt updated accordingly). The peace-lily test case has not been re-run against the new output shape; that remains outstanding. Ambiguous: one-pass produced 3 restrained steps; two-pass produced 6, inventing a spurious monthly maintenance obligation not present in the narration.
 
 **Decision: one-pass.** Matched or beat two-pass on all four. Both observed failure modes were two-pass — a malformed rule, and spurious step invention. One-pass is also simpler, faster and cheaper.
 
@@ -420,7 +420,7 @@ Life Walk extraction must output a nested structure (thing + ordered steps) rath
 - **Enjoyable things and schema.** Does capturing wanted things as plain projects work, or does something about how they're offered need to differ?
 - **The ten-completion tenure threshold.** Working assumption only.
 - **Whether the care plan should be shown for adjustment at capture**, or applied silently and corrected when obviously wrong. Showing it is honest but adds friction to a one-sentence flow.
-- **Whether any live `recurrence_rule` rows are real data.** Decides whether the recurrence migration is a drop-and-recapture or a proper migration. See the data model.
+- ~~**Whether any live `recurrence_rule` rows are real data.**~~ *Resolved: migration 009 asserts zero non-null rows before dropping the column; the assertion passed, confirming all rows were test data. Drop-and-recapture was the correct path.*
 
 ---
 

@@ -299,7 +299,7 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
   const hasObligation = obligations.length > 0
   const useCareSlot = !hasObligation && rawCareGroup != null
   const reservedSlots = hasObligation || useCareSlot ? 1 : 0
-  let pickedProjects = pickWithSpread(projects).slice(0, 3 - reservedSlots)
+  const pickedProjects = pickWithSpread(projects).slice(0, 3 - reservedSlots)
 
   // Design rule: at least one item per spread carries no time signal (null reason).
   // A project step gets a reason only when band === "short" ("quick one").

@@ -324,4 +324,45 @@ describe("recordStepEvent", () => {
     await recordStepEvent(supabase, "s1", "u1", { event_type: "skipped" })
     expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ metadata: null }))
   })
+
+  it("clears needs_know_how on accepted event (lib/things-service.ts:168-175)", async () => {
+    // When event_type === "accepted", the route must clear needs_know_how on the step
+    // so the familiarity question never fires again.
+    const insertFn = vi.fn(async () => ({ error: null }))
+    const eqUserId = vi.fn(async () => ({ error: null }))
+    const eqStepId = vi.fn(() => ({ eq: eqUserId }))
+    const updateFn = vi.fn(() => ({ eq: eqStepId }))
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "steps") {
+          // First call: SELECT (step lookup); second call: UPDATE needs_know_how
+          const stepChain = chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
+          stepChain.update = updateFn
+          return stepChain
+        }
+        return { insert: insertFn }
+      }),
+    } as unknown as Parameters<typeof recordStepEvent>[0]
+    await recordStepEvent(supabase, "s1", "u1", { event_type: "accepted" })
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "accepted" }))
+    expect(updateFn).toHaveBeenCalledWith({ needs_know_how: false })
+  })
+
+  it("throws when needs_know_how clear fails on accepted event (lib/things-service.ts:174)", async () => {
+    // The update error path after the accepted event insert.
+    const eqUserId = vi.fn(async () => ({ error: { message: "update failed" } }))
+    const eqStepId = vi.fn(() => ({ eq: eqUserId }))
+    const updateFn = vi.fn(() => ({ eq: eqStepId }))
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "steps") {
+          const stepChain = chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
+          stepChain.update = updateFn
+          return stepChain
+        }
+        return { insert: vi.fn(async () => ({ error: null })) }
+      }),
+    } as unknown as Parameters<typeof recordStepEvent>[0]
+    await expect(recordStepEvent(supabase, "s1", "u1", { event_type: "accepted" })).rejects.toThrow("update failed")
+  })
 })

@@ -512,6 +512,56 @@ describe("GET /api/offer", async () => {
     const data = await res.json()
     expect(data).toMatchObject({ in_progress: null, offer: [], care_group: null })
   })
+
+  it("fires offered events fire-and-forget when offer is non-empty", async () => {
+    // Covers lines 20-27: the step_events insert block runs when offer.length > 0.
+    // Fire-and-forget: result is irrelevant to the response, but the insert must be called.
+    const insertFn = vi.fn(async () => ({ error: null }))
+    const auth = fakeAuth({ from: vi.fn(() => ({ insert: insertFn })) })
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(auth as ReturnType<typeof fakeAuth>)
+    vi.mocked(loadOfferData).mockResolvedValue({
+      result: {
+        inProgress: null,
+        offer: [{ thing_id: "t1", thing_name: "T", step_id: "s1", step_name: "S", band: "short", mode: "doing", domain: "home", needs_know_how: false, reason: null }],
+        careGroup: null,
+      },
+      error: null,
+    })
+    const res = await GET()
+    expect(res.status).toBe(200)
+    // Allow the fire-and-forget microtask to settle
+    await new Promise((r) => setTimeout(r, 0))
+    expect(insertFn).toHaveBeenCalled()
+  })
+
+  it("updates last_care_offer_date fire-and-forget when care group is present", async () => {
+    // Covers lines 36-37: the profiles update runs when offerState.careGroup is set.
+    const updateFn = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }))
+    const auth = fakeAuth({ from: vi.fn(() => ({ update: updateFn, insert: vi.fn(async () => ({ error: null })) })) })
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(auth as ReturnType<typeof fakeAuth>)
+    vi.mocked(loadOfferData).mockResolvedValue({
+      result: {
+        inProgress: null,
+        offer: [],
+        careGroup: {
+          type: "care_group",
+          anchor_plan_id: "p1",
+          action: "Water",
+          location: "front room",
+          title: "Water the front room plants",
+          entity_names: ["Fern"],
+          plan_ids: ["p1"],
+          reason: null,
+          has_overdue: false,
+        },
+      },
+      error: null,
+    })
+    const res = await GET()
+    expect(res.status).toBe(200)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(updateFn).toHaveBeenCalledWith(expect.objectContaining({ last_care_offer_date: expect.any(String) }))
+  })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════

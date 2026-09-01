@@ -206,6 +206,21 @@ describe("care grouping", () => {
     expect(result?.title).toBe("Put out the kitchen bins")
   })
 
+  it("does not double-pluralise kind that already ends in 's' (care-grouping.ts:137 true branch)", () => {
+    // When anchor.entities.kind already ends with 's' (e.g. "bins"), the title must not
+    // append another 's'. Covers the `kindPlural = anchor.entities.kind` branch (line 137-138).
+    const base = { entity_id: "e1", intervals: {}, tolerance_days: 5, overdue_days: 1, last_done_at: null, archived_at: null }
+    const result = buildCareGroup(
+      [
+        { ...base, id: "a", action: "Put out", next_due_at: "2024-02-01", entities: { id: "e1", name: "Recycling", kind: "bins", location: "kitchen", archived_at: null } },
+        { ...base, id: "b", entity_id: "e2", action: "Put out", next_due_at: "2024-02-02", entities: { id: "e2", name: "General", kind: "bins", location: "kitchen", archived_at: null } },
+      ],
+      "2024-02-05",
+    )
+    // "bins" already ends with 's' — should stay "bins", not become "binss"
+    expect(result?.title).toBe("Put out the kitchen bins")
+  })
+
   it("deduplicates plans with same id in group (care-grouping.ts:108 false branch)", () => {
     // If a plan appears twice in the plans array with the same id, it's deduplicated
     const plan = {
@@ -420,6 +435,100 @@ describe("lifewalk parser", () => {
   it("handles missing things/entities keys — both default to empty, then throws", () => {
     // An object with no things/entities keys → both lists empty → throws
     expect(() => parseLifeWalkResultFromModelText("{}")).toThrow("No valid things in model response")
+  })
+
+  it("uses default tolerance_days=2 and overdue_days=7 when non-numeric (lib/lifewalk-parse.ts:153-154 false branch)", () => {
+    // normalizeEntity: tolerance_days/overdue_days default to 2/7 when not a number.
+    const entity = {
+      name: "Fern", kind: "plant", location: null, action: "Water",
+      intervals: { "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 7, "10": 7, "11": 7, "12": 7 },
+      tolerance_days: "not-a-number",   // non-numeric → default 2
+      overdue_days: "also-not-a-number", // non-numeric → default 7
+    }
+    const result = parseLifeWalkResultFromModelText(
+      JSON.stringify({ things: [validThing], entities: [entity] })
+    )
+    expect(result.entities).toHaveLength(1)
+    expect(result.entities[0].tolerance_days).toBe(2)
+    expect(result.entities[0].overdue_days).toBe(7)
+  })
+
+  it("does not count null/undefined entity items as drops (lib/lifewalk-parse.ts:181 false branch)", () => {
+    // The `else if (item !== null && item !== undefined)` false branch:
+    // when normalizeEntity returns null because item itself is null/undefined.
+    // Those are structural JSON noise and must NOT increment entities_dropped.
+    const result = parseLifeWalkResultFromModelText(
+      JSON.stringify({ things: [validThing], entities: [null, undefined] })
+    )
+    // null and undefined items are silently skipped, not counted as drops
+    expect(result.entities_dropped).toBe(0)
+    expect(result.entities).toHaveLength(0)
+  })
+})
+
+describe("normalizeDateOnly — branch coverage", () => {
+  it("returns null when value is not a string (lib/lifewalk-parse.ts:10 false branch)", () => {
+    // normalizeDateOnly is called for due_date which may be null, number, etc.
+    // The non-string branch is line 10: `if (typeof value !== "string") return null`
+    // Exercise it through normalizeThing by passing a numeric due_date.
+    const result = parseLifeWalkResultFromModelText(
+      JSON.stringify({
+        things: [{ name: "T", class: "project", due_date: 12345, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean" }] }],
+        entities: [],
+      })
+    )
+    // numeric due_date → normalizeDateOnly returns null
+    expect(result.things[0].due_date).toBeNull()
+  })
+
+  it("returns null when due_date string does not match YYYY-MM-DD (lib/lifewalk-parse.ts:12 false branch)", () => {
+    // The regex false branch: value is a string but doesn't match /^\d{4}-\d{2}-\d{2}$/.
+    // Exercise through normalizeThing with a non-date string.
+    const result = parseLifeWalkResultFromModelText(
+      JSON.stringify({
+        things: [{ name: "T", class: "project", due_date: "not-a-date", steps: [{ name: "S", band: "short", mode: "doing", shape: "clean" }] }],
+        entities: [],
+      })
+    )
+    // string but fails regex → returns null
+    expect(result.things[0].due_date).toBeNull()
+  })
+
+  it("uses defaults for non-string kind/location/action in normalizeEntity (lib/lifewalk-parse.ts:147-149)", () => {
+    // Covers the ternary false branches for kind/location/action when they are not strings.
+    const anchorThing = { name: "T", class: "project", steps: [{ name: "S", band: "short", mode: "doing", shape: "clean" }] }
+    const entity = {
+      name: "Fern",
+      kind: 42,           // non-string → "thing"
+      location: 99,       // non-string → null
+      action: undefined,  // non-string → "Care for"
+      intervals: { "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 7, "10": 7, "11": 7, "12": 7 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    const result = parseLifeWalkResultFromModelText(
+      JSON.stringify({ things: [anchorThing], entities: [entity] })
+    )
+    expect(result.entities).toHaveLength(1)
+    expect(result.entities[0].kind).toBe("thing")
+    expect(result.entities[0].location).toBeNull()
+    expect(result.entities[0].action).toBe("Care for")
+  })
+
+  it("uses empty string for non-string entity name, causing entity to be dropped (lib/lifewalk-parse.ts:144 false branch)", () => {
+    // Covers the ternary false branch on line 144: `typeof item.name === "string" ? ... : ""`
+    // then `if (!name) return null`. Non-string name → empty string → null returned → dropped.
+    const anchorThing = { name: "T", class: "project", steps: [{ name: "S", band: "short", mode: "doing", shape: "clean" }] }
+    const entity = {
+      name: 999, // non-string → normalizeEntity returns null (dropped)
+      kind: "plant", location: null, action: "Water",
+      intervals: { "1": 7, "2": 7, "3": 7, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 7, "10": 7, "11": 7, "12": 7 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    const result = parseLifeWalkResultFromModelText(
+      JSON.stringify({ things: [anchorThing], entities: [entity] })
+    )
+    expect(result.entities).toHaveLength(0)
+    expect(result.entities_dropped).toBe(1)
   })
 })
 

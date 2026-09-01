@@ -114,6 +114,18 @@ describe("loadOfferData", () => {
     expect(result.offer).toHaveLength(1)
   })
 
+  it("handles null doneEvents and null nudgedBackEvents from DB (fallback to [])", async () => {
+    // Covers lines 73-76: `(doneEvents ?? [])` and `(nudgedBackEvents ?? [])` null branches.
+    const supabase = makeSupabase({
+      doneEvents: { data: null, error: null },
+      nudgedBackEvents: { data: null, error: null },
+    })
+    const { result, error } = await loadOfferData(supabase, "u1")
+    expect(error).toBeNull()
+    // null events → completionCount=0, nudgeBackCounts={} — offer computation still works
+    expect(result.offer).toEqual([])
+  })
+
   it("nudgeBackCounts counts only nudged_back events — not stopped, edited, or why", async () => {
     // The old code counted every 'edited' event as a nudge-back, which meant three normal
     // stops would trip the degradation threshold. Now only nudged_back counts.

@@ -77,6 +77,17 @@ describe("persistThings", () => {
     ).rejects.toThrow("Failed to insert thing")
   })
 
+  it("passes null domain to RPC when thing.domain is null (lib/thing-persistence.ts:39 null branch)", async () => {
+    // Covers the `thing.domain ?? null` branch where domain is null.
+    const supabase = makeSupabase({ thingId: "t1" })
+    const thing = makeThing({ domain: null })
+    const result = await persistThings(supabase, [thing], { source: "life_walk", userId: "u1" })
+    expect(result.saved).toHaveLength(1)
+    expect(supabase.rpc).toHaveBeenCalledWith("insert_thing_with_steps", expect.objectContaining({
+      p_domain: null,
+    }))
+  })
+
   it("persists domain and due_date on the RPC call", async () => {
     const supabase = makeSupabase({ thingId: "t1" })
     const thing = makeThing({ domain: "vehicle", due_date: "2026-03-15" })

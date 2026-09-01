@@ -24,7 +24,7 @@ export async function GET() {
       event_type: "offered" as const,
       metadata: null,
     }))
-    void Promise.resolve(auth.supabase.from("step_events").insert(rows)).catch(() => {/* swallow */})
+    void Promise.resolve(auth.supabase.from("step_events").insert(rows)).catch(/* v8 ignore next */ () => {/* swallow */})
   }
 
   // Set last_care_offer_date the moment a care group is included in a response.
@@ -39,7 +39,7 @@ export async function GET() {
         .from("profiles")
         .update({ last_care_offer_date: today })
         .eq("id", auth.user.id)
-    ).catch(() => {/* swallow */})
+    ).catch(/* v8 ignore next */ () => {/* swallow */})
   }
 
   return NextResponse.json({

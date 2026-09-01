@@ -265,6 +265,26 @@ describe("POST /api/lifewalk", async () => {
     expect(data.entities_dropped).toBe(1) // parse-time drop only; RPC succeeded
   })
 
+  it("handles null rpcResult from entity insert without crashing (line 67 false branch)", async () => {
+    // Covers the `if (rpcResult)` false branch in saveEntities: RPC returns no error but
+    // also no data (e.g. void result). Entity is not pushed to saved but dropped is not incremented.
+    const rpcFn = vi.fn(async () => ({ data: null, error: null }))
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({ rpc: rpcFn }))
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    const entity = {
+      name: "Peace lily", kind: "plant", location: "bedroom", action: "Water",
+      intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity], entities_dropped: 0 })
+    const res = await POST(jsonReq("http://localhost", { transcript: "peace lily" }))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    // rpcResult null but no error → not pushed to saved, no entities_dropped
+    expect(data.entities).toEqual([])
+    expect(data.entities_dropped).toBeUndefined()
+  })
+
   it("returns 500 when AI returns no text block", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
@@ -541,6 +561,26 @@ describe("POST /api/capture/voice", async () => {
     expect(data.entities_dropped).toBe(1)
   })
 
+  it("saves entity successfully and does not include entities_dropped when RPC succeeds (line 124 false branch)", async () => {
+    // Covers the `if (error)` false branch in saveEntities — the normal success path
+    // where the RPC returns no error.
+    const rpcFn = vi.fn(async () => ({ data: { entity_id: "e1" }, error: null }))
+    const supabaseWithRpc = { ...makeServiceClient(), rpc: rpcFn }
+    vi.mocked(createServiceClient).mockReturnValue(supabaseWithRpc as unknown as ReturnType<typeof createServiceClient>)
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    vi.mocked(persistThings).mockResolvedValue({ saved: [] })
+    const entity = {
+      name: "Fern", kind: "plant", location: null, action: "Water",
+      intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity], entities_dropped: 0 })
+    const res = await POST(voiceReq({ text: "fern" }))
+    expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.entities_dropped).toBeUndefined()
+  })
+
   it("returns 500 when persistThings throws", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
@@ -561,6 +601,31 @@ describe("POST /api/capture/voice", async () => {
     expect(res.status).toBe(500)
     const data = await res.json()
     expect(data.error).toBe("Failed to save")
+  })
+
+  it("drops entity and increments dropped when intervals are invalid after parse (BUG guard branch)", async () => {
+    // Covers lines 106-108: the `if (!intervals)` guard in saveEntities in voice/route.ts.
+    // Reached by passing an entity that passes the 422 check but has bad intervals after extraction.
+    const supabaseWithRpc = { ...makeServiceClient(), rpc: vi.fn() }
+    vi.mocked(createServiceClient).mockReturnValue(supabaseWithRpc as unknown as ReturnType<typeof createServiceClient>)
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    vi.mocked(persistThings).mockResolvedValue({ saved: [] })
+    const badEntity = {
+      name: "Broken plant", kind: "plant", location: null, action: "Water",
+      intervals: { "1": "not-a-number" }, // invalid — parseIntervals returns null
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({
+      things: [],
+      entities: [badEntity] as unknown as Awaited<ReturnType<typeof extractFromNarration>>["entities"],
+      entities_dropped: 0,
+    })
+    const res = await POST(voiceReq({ text: "water broken plant" }))
+    expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.entities_dropped).toBe(1)
+    // The BUG branch dropped the entity without calling rpc
+    expect(supabaseWithRpc.rpc).not.toHaveBeenCalled()
   })
 })
 
@@ -707,6 +772,33 @@ describe("POST /api/lifewalk — branch coverage", async () => {
     expect(res.status).toBe(500)
     const data = await res.json()
     expect(data.error).toBe("Could not parse things")
+  })
+
+  it("drops entity and increments dropped when intervals are invalid after parse (BUG guard branch)", async () => {
+    // Covers lines 43-45: the `if (!intervals)` guard in saveEntities.
+    // parseIntervals is called a second time inside saveEntities; the entity has already
+    // passed normalizeEntity (which also calls parseIntervals), so this branch is normally
+    // unreachable. We reach it by smuggling a post-parse entity with bad intervals.
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    // Entity with invalid intervals (not a proper MonthlyIntervals object) — parseIntervals returns null.
+    const badEntity = {
+      name: "Broken plant", kind: "plant", location: null, action: "Water",
+      intervals: { "1": "not-a-number" }, // invalid — parseIntervals returns null
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({
+      things: [],
+      entities: [badEntity] as unknown as Awaited<ReturnType<typeof extractFromNarration>>["entities"],
+      entities_dropped: 0,
+    })
+    const res = await POST(jsonReq("http://localhost", { transcript: "broken plant" }))
+    // No things, all entities dropped → still 200 but entities_dropped = 1
+    // (The route only 422s when things AND entities are both empty at extraction time;
+    //  here entities was non-empty at that check, the drop happens inside saveEntities.)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.entities_dropped).toBe(1)
   })
 })
 

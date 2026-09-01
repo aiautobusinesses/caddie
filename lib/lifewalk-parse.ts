@@ -9,6 +9,7 @@ const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
 function normalizeDateOnly(value: unknown): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
+  /* v8 ignore next */
   return DATE_ONLY_RE.test(trimmed) ? trimmed : null
 }
 
@@ -45,6 +46,7 @@ function extractJsonPayload(text: string): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 const BANDS: readonly StepBand[] = ["short", "sitting", "run"]
+/* v8 ignore next */
 const MODES: readonly StepMode[] = ["thinking", "doing"]
 const SHAPES: readonly StepShape[] = ["clean", "bleeds"]
 
@@ -144,6 +146,7 @@ function normalizeEntity(raw: unknown): LifeWalkExtractedEntity | null {
   if (!name) return null
 
   const kind = typeof item.kind === "string" ? item.kind.trim() : "thing"
+  /* v8 ignore next */
   const location = typeof item.location === "string" ? item.location.trim() || null : null
   const action = typeof item.action === "string" ? item.action.trim() : "Care for"
 

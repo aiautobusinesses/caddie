@@ -30,7 +30,6 @@ export default defineConfig({
         "lib/offer.ts",
         "lib/offer-data.ts",
         "lib/push.ts",
-        "lib/recurrence.ts",
         "lib/seed-care-plan.ts",
         "lib/supabase/server-service.ts",
         "lib/tasks.ts",
