@@ -1,3 +1,12 @@
+/**
+ * StopNoteScreen — post-stop annotation screen.
+ *
+ * Copy rules (DESIGN.md §Stop, §Deliberately excluded):
+ *  - No encouragement, no "well done for stopping sensibly".
+ *  - The note prompt is neutral and practical.
+ *  - Skipping costs nothing and must feel free — no guilt framing.
+ *  - Factual and neutral only.
+ */
 "use client"
 
 import { useRef, useState } from "react"

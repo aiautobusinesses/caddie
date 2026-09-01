@@ -74,7 +74,15 @@ create trigger on_auth_user_created
 
 -- Enums
 create type thing_class  as enum ('obligation', 'project');
-create type event_type   as enum ('done', 'edited', 'notified');
+-- Keep this list in sync with the event_type values in lib/tasks.ts.
+-- Migrations 010 and 012 added values beyond the original three; this schema
+-- reflects the full current set so a fresh bootstrap is correct without migrations.
+create type event_type   as enum (
+  'done', 'edited', 'notified',
+  'offered', 'accepted', 'skipped',
+  'nudged_back', 'nudged_forward',
+  'stopped', 'why', 'stop_note'
+);
 create type task_source  as enum ('life_walk', 'manual', 'voice', 'photo');
 create type notify_time_of_day as enum ('morning', 'afternoon', 'evening');
 

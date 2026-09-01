@@ -141,6 +141,34 @@ describe("computeOffer", () => {
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].domain).toBe("other")
   })
+
+  it("missing live step in pickedProjects.every callback falls back to 'sitting' band (not 'short')", () => {
+    // Covers the `ls?.band ?? 'sitting'` fallback in the allPickedShort.every callback
+    // when the live_step_id does not match any step row in the join.
+    // An obligation fills the reserved slot; 2 projects with missing live steps are in the pool.
+    // Their band falls back to 'sitting', so allPickedShort is false and forceNullReasonId
+    // is not set — which is the correct fallback (sitting projects already have null reason).
+    const obligation = makeThing({
+      id: "ob", class: "obligation", due_date: "2024-02-03", notify_window: 10,
+      steps: [makeStep({ id: "so", band: "short" })],
+    })
+    // Both projects have live_step_id pointing to a missing step → band falls back to 'sitting'
+    const p1 = makeThing({ id: "p1", live_step_id: "missing1", steps: [] })
+    const p2 = makeThing({ id: "p2", live_step_id: "missing2", steps: [] })
+    const result = computeOffer({ ...baseInput, things: [obligation, p1, p2] })
+    // sitting-band (fallback) items have null reason — guarantee still holds
+    const hasNoReason = result.offer.some((item) => item.reason === null)
+    expect(hasNoReason).toBe(true)
+  })
+
+  it("missing live step in early-phase filter falls back to needs_know_how=false (not filtered)", () => {
+    // Covers the `liveStep?.needs_know_how ?? false` fallback in the earlyPhase filter.
+    // A thing with live_step_id pointing to a missing step row: the fallback is false,
+    // so the item is NOT filtered out in the early phase.
+    const thing = makeThing({ id: "t1", live_step_id: "missing", steps: [] })
+    const result = computeOffer({ ...baseInput, completionCount: 0, things: [thing] })
+    expect(result.offer).toHaveLength(1)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -215,21 +243,9 @@ describe("computeOffer — obligation reasons", () => {
     expect(result.offer).toHaveLength(0)
   })
 
-  it("undated obligation falls through to project pool and is offered on shape", () => {
-    // An obligation without a due_date has no clock but is still reachable — it falls
-    // through to the project pool and is offered on shape like any project.
-    const thing = makeThing({
-      class: "obligation",
-      due_date: null,
-      notify_window: 5,
-      steps: [makeStep()],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer).toHaveLength(1)
-    expect(result.offer[0].thing_id).toBe("t1")
-  })
-
-  it("undated obligation has no reason line (no clock to describe)", () => {
+  it("undated obligation is not offered — no factual basis to surface it", () => {
+    // An obligation without a due_date has no activation point; it must not appear
+    // in the offer until the user corrects it with a due date.
     const thing = makeThing({
       class: "obligation",
       due_date: null,
@@ -237,7 +253,20 @@ describe("computeOffer — obligation reasons", () => {
       steps: [makeStep()],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0]?.reason).toBeNull()
+    expect(result.offer).toHaveLength(0)
+  })
+
+  it("obligation with due_date but no notify_window is not offered", () => {
+    // A notify_window is required to determine when to surface an obligation.
+    // Without it the obligation stays silent.
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-02-05",
+      notify_window: null,
+      steps: [makeStep()],
+    })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer).toHaveLength(0)
   })
 
   it("undated obligation does not suppress care group — not clock-bearing", () => {
@@ -319,10 +348,10 @@ describe("computeOffer — one clock slot", () => {
     expect(result.careGroup).toBeNull()
   })
 
-  it("no-time-signal rule: swaps last short-band project for non-short when obligation occupies the clock slot", () => {
-    // Obligation (clock-bearing) + two short-band projects → all items would have reasons.
-    // The rule requires at least one no-reason item; the last short slot should be swapped
-    // for a sitting-band project from the pool.
+  it("no-time-signal rule: forces null reason when obligation + only short-band projects", () => {
+    // Obligation (clock-bearing) + only short-band projects in pool.
+    // pickWithSpread picks sitting/run first; with no sitting/run, all picks are short.
+    // forceNullReasonId ensures at least one item has no reason.
     const obligation = makeThing({
       id: "ob",
       class: "obligation",
@@ -330,10 +359,28 @@ describe("computeOffer — one clock slot", () => {
       notify_window: 10,
       steps: [makeStep({ id: "so", band: "short" })],
     })
-    const shortProject = makeThing({ id: "sp", live_step_id: "ssp", steps: [makeStep({ id: "ssp", band: "short" })] })
-    const sittingProject = makeThing({ id: "si", live_step_id: "ssi", steps: [makeStep({ id: "ssi", band: "sitting" })] })
-    const result = computeOffer({ ...baseInput, things: [obligation, shortProject, sittingProject] })
-    // At least one item must have a null reason
+    const sp1 = makeThing({ id: "sp1", live_step_id: "ss1", steps: [makeStep({ id: "ss1", band: "short" })] })
+    const sp2 = makeThing({ id: "sp2", live_step_id: "ss2", steps: [makeStep({ id: "ss2", band: "short" })] })
+    const result = computeOffer({ ...baseInput, things: [obligation, sp1, sp2] })
+    const hasNoReason = result.offer.some((item) => item.reason === null)
+    expect(hasNoReason).toBe(true)
+  })
+
+  it("no-time-signal rule: forces null reason on last short item when no non-short project exists", () => {
+    // Obligation (clock-bearing) + only short-band projects in pool, no non-short alternative.
+    // The swap cannot happen, so the guarantee is preserved by forcing reason = null on the
+    // last picked short project.
+    const obligation = makeThing({
+      id: "ob",
+      class: "obligation",
+      due_date: "2024-02-03",
+      notify_window: 10,
+      steps: [makeStep({ id: "so", band: "short" })],
+    })
+    const s1 = makeThing({ id: "sp1", live_step_id: "ss1", steps: [makeStep({ id: "ss1", band: "short" })] })
+    const s2 = makeThing({ id: "sp2", live_step_id: "ss2", steps: [makeStep({ id: "ss2", band: "short" })] })
+    const result = computeOffer({ ...baseInput, things: [obligation, s1, s2] })
+    // Guarantee: at least one item must have reason = null
     const hasNoReason = result.offer.some((item) => item.reason === null)
     expect(hasNoReason).toBe(true)
   })
@@ -378,6 +425,21 @@ describe("computeOffer — pickWithSpread", () => {
     const bands = result.offer.map((item) => item.band)
     const uniqueBands = new Set(bands)
     expect(uniqueBands.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it("getDomain falls back to 'other' for null-domain thing inside pickWithSpread (> 3 items)", () => {
+    // Covers the `thing.domain ?? 'other'` fallback in getDomain inside pickWithSpread.
+    // Requires >3 items so the spread logic runs (not the early return).
+    const things = [
+      makeThing({ id: "t1", domain: null, live_step_id: "s1", steps: [makeStep({ id: "s1", band: "sitting" })] }),
+      makeThing({ id: "t2", domain: "home", live_step_id: "s2", steps: [makeStep({ id: "s2", band: "sitting" })] }),
+      makeThing({ id: "t3", domain: "admin", live_step_id: "s3", steps: [makeStep({ id: "s3", band: "sitting" })] }),
+      makeThing({ id: "t4", domain: "vehicle", live_step_id: "s4", steps: [makeStep({ id: "s4", band: "sitting" })] }),
+    ]
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer).toHaveLength(3)
+    const domains = result.offer.map((item) => item.domain)
+    expect(domains.some((d) => d === "other")).toBe(true)
   })
 
   it("fills remaining slots from overflow when only one band present", () => {
@@ -588,5 +650,106 @@ describe("computeOffer — per-thing degradation", () => {
     const thing = makeThing({ id: "t1", name: "Garden bed" })
     const result = computeOffer({ ...baseInput, things: [thing], nudgeBackCounts: {} })
     expect(result.offer[0].step_name).toBe("Step 1")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Specification invariants
+//
+// These tests are written against sentences in DESIGN.md, not against the
+// implementation. They describe what must always be true, not how the code
+// achieves it. If any of these fail, a design rule has been broken.
+// ---------------------------------------------------------------------------
+
+describe("computeOffer — design invariants", () => {
+  it("INV: at most one clock-bearing item in any spread", () => {
+    // DESIGN.md §Offer: "One clock-bearing slot per spread, maximum."
+    // A clock-bearing item is one that carries a time signal: an obligation or a care group.
+    // The spread must never have two.
+    const obligation = makeThing({
+      id: "ob", class: "obligation", due_date: "2024-02-03", notify_window: 10,
+      steps: [makeStep({ id: "so" })],
+    })
+    const plan = makePlan()
+    const project = makeThing({ id: "tp", live_step_id: "sp", steps: [makeStep({ id: "sp" })] })
+    const result = computeOffer({ ...baseInput, things: [obligation, project], carePlans: [plan] })
+
+    // Count clock-bearing items: obligations (have a reason from due_date) + care group presence
+    const obligationItems = result.offer.filter((item) => item.thing_id === "ob")
+    const hasCareGroup = result.careGroup !== null
+    const clockBearingCount = obligationItems.length + (hasCareGroup ? 1 : 0)
+    expect(clockBearingCount).toBeLessThanOrEqual(1)
+  })
+
+  it("INV: project step reasons never contain urgency language", () => {
+    // DESIGN.md §Engineering constraints: "Does it add urgency language to a project step?"
+    // Project reasons must be null, "quick one", or another non-clock phrase.
+    // They must never say "due", "overdue", "urgent", "deadline", "expires", etc.
+    const urgencyWords = ["due", "overdue", "urgent", "deadline", "expires", "by "]
+    const projects = [
+      makeThing({ id: "t1", steps: [makeStep({ band: "short" })] }),
+      makeThing({ id: "t2", live_step_id: "s2", steps: [makeStep({ id: "s2", band: "sitting" })] }),
+      makeThing({ id: "t3", live_step_id: "s3", steps: [makeStep({ id: "s3", band: "run" })] }),
+    ]
+    const result = computeOffer({ ...baseInput, things: projects, completionCount: TENURE_THRESHOLD })
+    for (const item of result.offer) {
+      if (item.reason !== null) {
+        const lower = item.reason.toLowerCase()
+        for (const word of urgencyWords) {
+          expect(lower, `project reason "${item.reason}" contains urgency word "${word}"`).not.toContain(word)
+        }
+      }
+    }
+  })
+
+  it("INV: at least one item per spread has reason = null when a clock-bearing item is present", () => {
+    // DESIGN.md §Offer: "At least one item per spread carries no time signal at all.
+    // Deliberately protected."
+    const obligation = makeThing({
+      id: "ob", class: "obligation", due_date: "2024-02-03", notify_window: 10,
+      steps: [makeStep({ id: "so", band: "short" })],
+    })
+    const p1 = makeThing({ id: "p1", live_step_id: "sp1", steps: [makeStep({ id: "sp1", band: "short" })] })
+    const p2 = makeThing({ id: "p2", live_step_id: "sp2", steps: [makeStep({ id: "sp2", band: "short" })] })
+    const result = computeOffer({ ...baseInput, things: [obligation, p1, p2] })
+
+    const clockPresent = result.offer.some((i) => i.reason !== null) || result.careGroup !== null
+    if (clockPresent) {
+      const hasNullReason = result.offer.some((i) => i.reason === null)
+      expect(hasNullReason).toBe(true)
+    }
+  })
+
+  it("INV: offer never exceeds three items (projects + at most one obligation)", () => {
+    // DESIGN.md §Offer: "Two or three offers of deliberately different shapes."
+    const things = Array.from({ length: 10 }, (_, i) =>
+      makeThing({ id: `t${i}`, live_step_id: `s${i}`, steps: [makeStep({ id: `s${i}` })] })
+    )
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer.length).toBeLessThanOrEqual(3)
+  })
+
+  it("INV: obligation outside its notify_window is never offered", () => {
+    // DESIGN.md §Offer: obligations surface only inside their notify_window.
+    // An obligation 30 days away with a 5-day window must not appear.
+    const future = makeThing({
+      id: "ob", class: "obligation", due_date: "2024-03-15", notify_window: 5,
+      steps: [makeStep()],
+    })
+    const result = computeOffer({ ...baseInput, today: "2024-02-01", things: [future] })
+    expect(result.offer).toHaveLength(0)
+    expect(result.careGroup).toBeNull()
+  })
+
+  it("INV: offer is never empty when things are available (floor rule)", () => {
+    // DESIGN.md §Tenure and the early phase: "Floor rule: tenure gating must never
+    // return fewer than one offer."
+    // Even if all steps have needs_know_how, something must be offered.
+    const things = [
+      makeThing({ id: "t1", name: "Thing A", steps: [makeStep({ needs_know_how: true })] }),
+      makeThing({ id: "t2", name: "Thing B", live_step_id: "s2", steps: [makeStep({ id: "s2", needs_know_how: true })] }),
+    ]
+    const result = computeOffer({ ...baseInput, completionCount: 0, things })
+    expect(result.offer.length).toBeGreaterThanOrEqual(1)
   })
 })

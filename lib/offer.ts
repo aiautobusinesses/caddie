@@ -108,6 +108,14 @@ export function isEarlyPhase(completionCount: number): boolean {
 /**
  * Build the reason line for an offer item.
  *
+ * Design constraints (DESIGN.md §Offer, §Engineering constraints):
+ *  - NEVER add urgency language to a project step. Projects have no real deadline;
+ *    any urgency attached to them is spurious and triggers the mere urgency effect.
+ *  - NEVER invent a fact to justify an offer. Reasons must be "always true".
+ *    Concrete: "MOT's due in 12 days", never "due soon".
+ *  - Reasons are specific when Caddie knows, null when it doesn't.
+ *    A null reason is a first-class value, not a fallback to paper over.
+ *
  * Rules:
  *  - Obligations: due-date reason from `thing.due_date` (never from a step field).
  *  - Projects:    never urgency language.  Prefer a non-clock reason; fall back to null.
@@ -259,17 +267,18 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
   // Things with no steps at all are not actionable and also excluded.
   const available = things.filter((thing) => thing.live_step_id != null)
 
+  // Design constraint: obligations surface ONLY inside their notify_window.
+  // An obligation with no due_date or no notify_window has no defined activation
+  // moment and must not be offered at all — there is no factual reason to give.
   const obligations = available.filter((thing) => {
     if (thing.class !== "obligation") return false
     if (!thing.due_date || thing.notify_window == null) return false
     return daysBetween(today, thing.due_date) <= thing.notify_window
   })
 
-  // Projects: obligations without a clock (no due_date / notify_window) fall through here
-  // and are offered on shape like any project. They have no reason line but are reachable.
-  const allProjects = available.filter(
-    (thing) => thing.class === "project" || (thing.class === "obligation" && (!thing.due_date || thing.notify_window == null))
-  )
+  // Only true projects go into the project pool.
+  // Obligations not in the window above are excluded entirely — not demoted to projects.
+  const allProjects = available.filter((thing) => thing.class === "project")
 
   const filteredProjects = earlyPhase
     ? allProjects.filter((thing) => {
@@ -294,37 +303,31 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
 
   // Design rule: at least one item per spread carries no time signal (null reason).
   // A project step gets a reason only when band === "short" ("quick one").
-  // Obligations and care groups always carry a reason. So:
-  //   (a) If every picked project has band === "short", swap the last one for a
-  //       non-short project — that item will have reason null.
-  //   (b) If there are no picked projects at all but projects exist, add one
-  //       non-short project to fill a slot (capacity permitting), so the spread
-  //       isn't entirely composed of clock-bearing items.
-  // Neither branch applies when there is no clock-bearing item (reservedSlots === 0),
-  // because in that case the spread already has a no-reason item whenever any
-  // project has band !== "short".
-  if (reservedSlots > 0 && projects.length > 0) {
-    const allPickedShort = pickedProjects.length > 0 && pickedProjects.every((t) => {
+  // Obligations and care groups always carry a reason. So when a clock-bearing item
+  // occupies the reserved slot and every picked project has band === "short":
+  //   Force reason = null on the last picked short project so the guarantee holds
+  //   regardless of pool composition.
+  // The rule doesn't apply when reservedSlots === 0 — the spread has a no-reason
+  // item whenever any project has band !== "short".
+  //
+  // Note: pickWithSpread already prefers non-short items (sitting/run buckets are
+  // tried first), so all-short picks only happen when the pool is entirely short-band.
+  // In that case there is no non-short alternative to swap in, and forceNullReasonId
+  // is the correct approach.
+  //
+  // forceNullReasonId: when set, the reason for that item is forced to null at map time.
+  let forceNullReasonId: string | null = null
+
+  if (reservedSlots > 0 && pickedProjects.length > 0) {
+    const allPickedShort = pickedProjects.every((t) => {
       const ls = t.steps.find((s) => s.id === t.live_step_id)
       return (ls?.band ?? "sitting") === "short"
     })
-    const noProjects = pickedProjects.length === 0
 
-    if (allPickedShort || noProjects) {
-      const nonShort = projects.find(
-        (t) => !pickedProjects.includes(t) && (t.steps.find((s) => s.id === t.live_step_id)?.band ?? "sitting") !== "short"
-      )
-      if (nonShort) {
-        if (allPickedShort) {
-          // Replace the last picked short-band slot with the non-short item.
-          pickedProjects = [...pickedProjects.slice(0, pickedProjects.length - 1), nonShort]
-        } else {
-          // No projects were picked; add the non-short item if a slot is free.
-          if (pickedProjects.length < 3 - reservedSlots) {
-            pickedProjects = [...pickedProjects, nonShort]
-          }
-        }
-      }
+    if (allPickedShort) {
+      // All project slots are short-band; guarantee a no-reason item by forcing
+      // the last picked project's reason to null.
+      forceNullReasonId = pickedProjects[pickedProjects.length - 1].id
     }
   }
 
@@ -365,7 +368,7 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
       // Suppress needs_know_how when showing a generic step name — the accept-question
       // makes no sense when we've already hidden the specific step behind a fallback.
       needs_know_how: (useGenericName || isUnconfirmedKnowHow) ? false : (liveStep?.needs_know_how ?? false),
-      reason: buildReason(thing, liveStep, today, earlyPhase),
+      reason: (forceNullReasonId === thing.id) ? null : buildReason(thing, liveStep, today, earlyPhase),
     } satisfies OfferItem
   })
 

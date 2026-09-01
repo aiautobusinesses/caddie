@@ -1,3 +1,13 @@
+/**
+ * FocusScreen — shown when the user has started a step.
+ *
+ * Copy rules (DESIGN.md §Deliberately excluded):
+ *  - No encouragement, praise or pep talk ("great work", "nearly there", "well done").
+ *    Verbal persuasion is the weakest efficacy source and is controlling under Deci.
+ *  - No urgency language.
+ *  - No progress bars, percentages or steps-remaining counts.
+ *  - Factual and neutral only.
+ */
 "use client"
 
 import { useState } from "react"
@@ -69,7 +79,7 @@ export default function FocusScreen({
           {inProgress.step_name ?? inProgress.thing_name ?? ""}
         </p>
         <p className="mt-3.5 text-sm text-muted">
-          {justStarted ? "started just now" : "welcome back"}
+          {justStarted ? "just started" : "picked up where you left off"}
         </p>
       </div>
 

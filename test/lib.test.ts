@@ -41,7 +41,7 @@ describe("care helpers", () => {
     expect(daysUntilDue("2024-02-04", "2024-02-01")).toBe(3)
     expect(buildCareReason("2024-02-01", "2024-01-25", 0, "2024-02-04")).toBe("hasn't been done in 10 days")
     expect(buildCareReason("2024-02-01", null, 0, "2024-02-04")).toBe("hasn't been done in a while")
-    expect(buildCareReason("2024-02-01", null, 4, "2024-02-01")).toBe("due now")
+    expect(buildCareReason("2024-02-01", null, 4, "2024-02-01")).toBeNull()
     expect(buildCareReason("2024-02-10", null, 4, "2024-02-01")).toBeNull()
     expect(buildCareReason(null, null, 0, "2024-02-01")).toBeNull()
   })
@@ -216,6 +216,35 @@ describe("care grouping", () => {
     const result = buildCareGroup([plan, plan], "2024-02-05")
     // Despite duplicate, only one member
     expect(result?.plan_ids).toHaveLength(1)
+  })
+
+  // INV: "Same action in a different room stays a separate offer — it's a different trip."
+  // DESIGN.md §Grouping, line 180
+  it("INV: same action + different room produces separate offers, not one merged group", () => {
+    const base = {
+      entity_id: "e1", intervals: {}, tolerance_days: 5, overdue_days: 0,
+      last_done_at: null, archived_at: null,
+    }
+    const frontRoom = {
+      ...base,
+      id: "a", action: "Water", next_due_at: "2024-02-01",
+      entities: { id: "e1", name: "Fern", kind: "plant", location: "front room", archived_at: null },
+    }
+    const bedroom = {
+      ...base,
+      id: "b", entity_id: "e2", action: "Water", next_due_at: "2024-02-01",
+      entities: { id: "e2", name: "Pothos", kind: "plant", location: "bedroom", archived_at: null },
+    }
+
+    // buildCareGroup operates on a single anchor at a time — the grouping filter
+    // must never pull in plans from a different location.
+    // Call separately (as offer assembly would) to verify each produces its own group.
+    const groupA = buildCareGroup([frontRoom, bedroom], "2024-02-05")
+    const groupB = buildCareGroup([bedroom, frontRoom], "2024-02-05")
+
+    // Each group contains only its own plan — the other-room plan must not bleed in
+    expect(groupA?.plan_ids).not.toContain("b")
+    expect(groupB?.plan_ids).not.toContain("a")
   })
 })
 

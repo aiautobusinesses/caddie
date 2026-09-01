@@ -62,7 +62,15 @@ export function daysUntilDue(nextDueAt: string, today: string): number {
   )
 }
 
-/** Build a human reason string for a care offer item. */
+/**
+ * Build a human reason string for a care offer item.
+ *
+ * Design constraint (DESIGN.md §Offer): reasons must be "always true" and specific
+ * when Caddie knows, null when it doesn't. Never invent urgency.
+ * Only genuinely overdue plans (past next_due_at + overdue_days) get an overdue reason.
+ * A plan that is merely due today is offered without a reason — the offer card will still
+ * appear; null reason is not a failure state.
+ */
 export function buildCareReason(
   nextDueAt: string | null,
   lastDoneAt: string | null,
@@ -82,7 +90,9 @@ export function buildCareReason(
     return "hasn't been done in a while"
   }
 
-  const days = daysUntilDue(nextDueAt, today)
-  if (days <= 0) return "due now"
+  // Plan is due but not yet genuinely overdue — no reason line.
+  // The design rule: "specific when Caddie knows, generic when it doesn't."
+  // "due now" adds spurious urgency for something that merely became due today;
+  // the card will still appear in the offer (it passed the due filter); reason = null.
   return null
 }
