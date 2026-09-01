@@ -1,36 +1,36 @@
 import Anthropic from "@anthropic-ai/sdk"
 import { normalizeDateOnly } from "@/lib/recurrence"
-import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass, ThingDomain, StepBand, StepMode, StepShape } from "@/lib/tasks"
+import type { LifeWalkExtractedThing, LifeWalkExtractedStep, LifeWalkExtractedEntity, LifeWalkExtractionResult, NotifyTimeOfDay, ThingClass, ThingDomain, StepBand, StepMode, StepShape } from "@/lib/tasks"
 import { isTaskUrgency, isThingDomain } from "@/lib/tasks"
+import { parseIntervals } from "@/lib/care"
 import { getLifewalkModel, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
 
 // ---------------------------------------------------------------------------
 // JSON extraction
 // ---------------------------------------------------------------------------
 
-function extractJsonPayload(text: string): unknown {
+function extractJsonPayload(text: string): Record<string, unknown> {
   let cleaned = text.trim()
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim()
 
+  let parsed: unknown
   try {
-    return JSON.parse(cleaned)
+    parsed = JSON.parse(cleaned)
   } catch {
-    const start = cleaned.indexOf("[")
-    const end = cleaned.lastIndexOf("]")
-    if (start !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1))
-    }
-
     const objStart = cleaned.indexOf("{")
     const objEnd = cleaned.lastIndexOf("}")
-    /* v8 ignore next 3 */
     if (objStart !== -1 && objEnd > objStart) {
-      const obj = JSON.parse(cleaned.slice(objStart, objEnd + 1)) as Record<string, unknown>
-      if (Array.isArray(obj.things)) return obj.things
+      parsed = JSON.parse(cleaned.slice(objStart, objEnd + 1))
+    } else {
+      throw new Error("No JSON object found in model response")
     }
-
-    throw new Error("No JSON array found in model response")
   }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("No JSON object found in model response")
+  }
+
+  return parsed as Record<string, unknown>
 }
 
 // ---------------------------------------------------------------------------
@@ -126,37 +126,68 @@ function normalizeThing(raw: unknown): LifeWalkExtractedThing | null {
 }
 
 // ---------------------------------------------------------------------------
+// Entity normalisation
+// ---------------------------------------------------------------------------
+
+function normalizeEntity(raw: unknown): LifeWalkExtractedEntity | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const item = raw as Record<string, unknown>
+
+  const name = typeof item.name === "string" ? item.name.trim() : ""
+  if (!name) return null
+
+  const kind = typeof item.kind === "string" ? item.kind.trim() : "thing"
+  const location = typeof item.location === "string" ? item.location.trim() || null : null
+  const action = typeof item.action === "string" ? item.action.trim() : "Care for"
+
+  const intervals = parseIntervals(item.intervals)
+  if (!intervals) return null
+
+  const tolerance_days = typeof item.tolerance_days === "number" ? item.tolerance_days : 2
+  const overdue_days = typeof item.overdue_days === "number" ? item.overdue_days : 7
+
+  return { name, kind, location, action, intervals, tolerance_days, overdue_days }
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
-export function parseLifeWalkThingsFromModelText(text: string): LifeWalkExtractedThing[] {
+export function parseLifeWalkResultFromModelText(text: string): LifeWalkExtractionResult {
   const payload = extractJsonPayload(text)
-  const list = Array.isArray(payload) ? payload : []
+
+  const thingList = Array.isArray(payload.things) ? payload.things : []
+  const entityList = Array.isArray(payload.entities) ? payload.entities : []
 
   const things: LifeWalkExtractedThing[] = []
-  for (const item of list) {
+  for (const item of thingList) {
     const thing = normalizeThing(item)
     if (thing) things.push(thing)
   }
 
-  if (things.length === 0) {
+  const entities: LifeWalkExtractedEntity[] = []
+  for (const item of entityList) {
+    const entity = normalizeEntity(item)
+    if (entity) entities.push(entity)
+  }
+
+  if (things.length === 0 && entities.length === 0) {
     throw new Error("No valid things in model response")
   }
 
-  return things
+  return { things, entities }
 }
 
-// Keep old export name as alias so the lifewalk route still compiles until rewritten
 export { isTaskUrgency }
 
 // ---------------------------------------------------------------------------
 // LLM extraction (shared by lifewalk and voice capture routes)
 // ---------------------------------------------------------------------------
 
-export async function extractThingsFromNarration(
+export async function extractFromNarration(
   client: Anthropic,
   text: string,
-): Promise<LifeWalkExtractedThing[]> {
+): Promise<LifeWalkExtractionResult> {
   let message: Anthropic.Message
   try {
     message = await client.messages.create({
@@ -195,7 +226,7 @@ export async function extractThingsFromNarration(
   }
 
   try {
-    return parseLifeWalkThingsFromModelText(textBlock.text)
+    return parseLifeWalkResultFromModelText(textBlock.text)
   } catch (error) {
     /* v8 ignore next */
     const msg = error instanceof Error ? error.message : "Could not parse things"

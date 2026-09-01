@@ -171,8 +171,9 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
 
   /**
    * Called from StopNoteScreen when the user saves a note/photo or skips.
-   * If content is provided, record a second stopped event with the metadata.
-   * Then return to the offer screen.
+   * If content is provided, record a `stop_note` event with the annotation.
+   * The `stopped` event was already written server-side by markThingStillGoing,
+   * so this is a distinct annotation record — not a second session marker.
    */
   async function handleStopNote(note: string | null, photoFile: File | null) {
     const stepId = stopNoteStepId
@@ -185,9 +186,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          event_type: "stopped",
+          event_type: "stop_note",
           metadata: {
-            kind: "stopped",
             ...(note ? { note } : {}),
             ...(photoName ? { photo_name: photoName } : {}),
           },

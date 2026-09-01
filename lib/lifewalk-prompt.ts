@@ -21,9 +21,9 @@ export function getLifewalkModel(): string {
 
 export const LIFEWALK_EXTRACTION_PROMPT = `You are helping someone manage their life admin. They have narrated a walk around their home and life, describing things they notice that need doing.
 
-Extract every distinct THING from this narration and break each one into ordered STEPS — the actual actions, in the order they need to happen.
+Extract every distinct item and classify it as either a THING (a one-off project or obligation with discrete steps) or an ENTITY (something that needs recurring care on an ongoing schedule, e.g. a plant, a bin, a boiler service).
 
-Rules:
+Rules for THINGS:
 - The unit is the STEP, not the thing. "Order a bath panel" is a step. "Fix the bathroom" is not.
 - Each step must be a specific, startable action. "Order a bath panel" not "bath panel" or "sort out the bathroom".
 - Buying is a step, not a precondition. If something needs materials, "Order X" or "Buy X" is step 1.
@@ -37,9 +37,15 @@ Rules:
 - Do not estimate durations in minutes. Use band as a coarse judgement only.
 - Step ordering: where the order is genuinely flexible, put steps whose outcome is visibly perceptible (something moves, changes or is completed) earlier in the chain. Prefer progress that can be seen over internal or preparatory steps.
 - Tone: all step names and reason lines must be factual and neutral. Do not write encouragement, praise, or motivational language ("nearly there", "good effort", "great work", "almost done") in any output field.
-- Recurring care (watering, mowing, bin day) produces an entity + care plan, not a thing + steps. Do not include recurring items in this output.
 
-For each thing return:
+Rules for ENTITIES (recurring care):
+- Use for anything that needs the same action repeated on a schedule: watering, feeding, mowing, putting out bins, servicing appliances, etc.
+- Each entity has one primary recurring action (e.g. "Water", "Feed", "Put out", "Service").
+- Provide monthly intervals: how many days between care actions for each calendar month (1 = January … 12 = December). Vary by season where it makes sense (e.g. water plants more in summer). Use your knowledge of the item; be conservative (slightly too often is better than too rarely).
+- tolerance_days: how many days early the action can be done without harm (plants 2–3; bins on collection day 0; appliances 3–7).
+- overdue_days: how many days past the due date before it genuinely matters (sensitive plants 5–7; bins 0; appliances 30+).
+
+For each THING return an object with:
 - name: plain English name, keep the narrator's voice (e.g. "Bath panel", "MOT", "Shed")
 - class: "obligation" if something bad happens if a date passes (MOT, tax, insurance, bills); otherwise "project"
 - domain: one of "home", "admin", "vehicle", "garden", "finance", "other" — coarse category for variety; assign based on subject matter
@@ -54,7 +60,17 @@ For each thing return:
   - shape: "clean" if this step has a natural end and completing it is unambiguous; "bleeds" if it may need multiple sessions or has a mandatory wait (e.g. paint drying, delivery arriving)
   - needs_know_how: true if the step requires domain knowledge a non-expert might not have (e.g. "Prepare the walls for painting", "Wire the socket", "Bleed the radiator"); false for steps that are self-evidently startable ("Order the paint", "Book the MOT", "Put the bins out")
 
-Return ONLY a valid JSON array of things. No markdown, no code fences, no commentary.
+For each ENTITY return an object with:
+- name: short plain English name (e.g. "Peace lily", "Green bin", "Boiler")
+- kind: category in one or two words (e.g. "plant", "bin", "appliance")
+- location: where it lives if mentioned (e.g. "front room", "kitchen"); null if not mentioned
+- action: the primary recurring action, imperative (e.g. "Water", "Feed", "Put out", "Service")
+- intervals: object with keys "1" through "12" (month numbers as strings) mapping to integer days between care actions
+- tolerance_days: integer
+- overdue_days: integer
+
+Return ONLY a valid JSON object with two keys — no markdown, no code fences, no commentary:
+{"things":[...],"entities":[...]}
 
 Example:
-[{"name":"Bath panel","class":"project","domain":"home","due_date":null,"notify_window":null,"notify_time_of_day":null,"notify_escalate":false,"steps":[{"name":"Measure up and order the right size panel","band":"short","mode":"thinking","shape":"clean","needs_know_how":false},{"name":"Remove old panel and treat mould on wall","band":"sitting","mode":"doing","shape":"bleeds","needs_know_how":true},{"name":"Fit new panel and seal edges","band":"sitting","mode":"doing","shape":"clean","needs_know_how":true}]},{"name":"MOT","class":"obligation","domain":"vehicle","due_date":"2026-03-15","notify_window":14,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Book MOT at the garage","band":"short","mode":"thinking","shape":"clean","needs_know_how":false}]}]`
+{"things":[{"name":"Bath panel","class":"project","domain":"home","due_date":null,"notify_window":null,"notify_time_of_day":null,"notify_escalate":false,"steps":[{"name":"Measure up and order the right size panel","band":"short","mode":"thinking","shape":"clean","needs_know_how":false},{"name":"Remove old panel and treat mould on wall","band":"sitting","mode":"doing","shape":"bleeds","needs_know_how":true},{"name":"Fit new panel and seal edges","band":"sitting","mode":"doing","shape":"clean","needs_know_how":true}]},{"name":"MOT","class":"obligation","domain":"vehicle","due_date":"2026-03-15","notify_window":14,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Book MOT at the garage","band":"short","mode":"thinking","shape":"clean","needs_know_how":false}]}],"entities":[{"name":"Peace lily","kind":"plant","location":"bedroom","action":"Water","intervals":{"1":14,"2":14,"3":10,"4":7,"5":7,"6":7,"7":7,"8":7,"9":10,"10":14,"11":14,"12":14},"tolerance_days":2,"overdue_days":5}]}`

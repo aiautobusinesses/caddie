@@ -446,7 +446,7 @@ export type Database = {
       account_tier: "standard" | "advanced"
       thing_class: "obligation" | "project"
       task_source: "life_walk" | "manual" | "voice" | "photo"
-      event_type: "done" | "edited" | "notified" | "offered" | "accepted" | "skipped" | "nudged_back" | "nudged_forward" | "stopped" | "why"
+      event_type: "done" | "edited" | "notified" | "offered" | "accepted" | "skipped" | "nudged_back" | "nudged_forward" | "stopped" | "why" | "stop_note"
       notify_time_of_day: "morning" | "afternoon" | "evening"
       step_band: "short" | "sitting" | "run"
       step_mode: "thinking" | "doing"

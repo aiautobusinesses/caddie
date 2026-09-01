@@ -206,6 +206,25 @@ describe("recordStepEvent", () => {
     expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "stopped" }))
   })
 
+  it("inserts stop_note event with metadata — distinct from the stopped session marker", async () => {
+    const insertFn = vi.fn(async () => ({ error: null }))
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "steps") {
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
+        }
+        return { insert: insertFn }
+      }),
+    } as unknown as Parameters<typeof recordStepEvent>[0]
+    const metadata = { note: "got to the third step" } as unknown as import("@/lib/database.types").Json
+    const result = await recordStepEvent(supabase, "s1", "u1", { event_type: "stop_note", metadata })
+    expect(result).toEqual({ ok: true })
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+      event_type: "stop_note",
+      metadata: { note: "got to the third step" },
+    }))
+  })
+
   it("inserts why event with event_type='why' and enriched metadata", async () => {
     const insertFn = vi.fn(async () => ({ error: null }))
     const supabase = {

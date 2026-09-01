@@ -1,0 +1,11 @@
+-- Migration 012: split the stop-note write from the stopped event.
+--
+-- A still-going stop already writes a `stopped` event server-side
+-- (markThingStillGoing). The subsequent note-save screen was writing a second
+-- `stopped` row, which makes session counting incorrect: Reflect would see two
+-- stopped events per stop-with-a-note and count it as two sessions.
+--
+-- `stop_note` carries the user's annotation (note text, photo reference) and
+-- is always preceded by exactly one `stopped` event from the same stop.
+-- Counting `stopped` gives sessions directly; `stop_note` gives resumption cues.
+alter type event_type add value if not exists 'stop_note';

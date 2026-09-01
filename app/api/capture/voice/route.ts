@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server-service"
 import { resolveAiGateway } from "@/lib/ai-gateway"
-import { extractThingsFromNarration } from "@/lib/lifewalk-parse"
+import { extractFromNarration } from "@/lib/lifewalk-parse"
 import { persistThings } from "@/lib/thing-persistence"
-import type { Database } from "@/lib/database.types"
+import { parseIntervals, computeInitialNextDueAt } from "@/lib/care"
+import type { Database, Json } from "@/lib/database.types"
+import type { SupabaseClient } from "@supabase/supabase-js"
+import type { LifeWalkExtractedEntity } from "@/lib/tasks"
 
 /**
  * POST /api/capture/voice
@@ -56,24 +59,49 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: gateway.error }, { status: 503 })
   }
 
-  // ── Extract things via Claude ──────────────────────────────────────────────
-  let things
+  // ── Extract things + entities via Claude ──────────────────────────────────
+  let things: Awaited<ReturnType<typeof extractFromNarration>>["things"]
+  let entities: Awaited<ReturnType<typeof extractFromNarration>>["entities"]
   try {
-    things = await extractThingsFromNarration(gateway.client, text)
+    ;({ things, entities } = await extractFromNarration(gateway.client, text))
   } catch (err) {
     const msg = err instanceof Error ? err.message : "AI request failed"
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 
-  if (things.length === 0) {
+  if (things.length === 0 && entities.length === 0) {
     return NextResponse.json({ error: "No things extracted from text" }, { status: 422 })
   }
 
   // ── Persist via service role (integration context — no session cookie) ────
   try {
     const result = await persistThings(supabase, things, { source: "voice", userId })
+    await saveEntities(supabase as unknown as SupabaseClient<Database>, userId, entities)
     return NextResponse.json({ saved: result.saved }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to save" }, { status: 500 })
+  }
+}
+
+async function saveEntities(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  entities: LifeWalkExtractedEntity[],
+): Promise<void> {
+  for (const entity of entities) {
+    const intervals = parseIntervals(entity.intervals)
+    if (!intervals) continue
+    const nextDueAt = computeInitialNextDueAt(intervals)
+    await supabase.rpc("insert_entity_with_care_plan", {
+      p_user_id: userId,
+      p_name: entity.name,
+      p_kind: entity.kind,
+      p_location: entity.location ?? null,
+      p_action: entity.action,
+      p_intervals: intervals as unknown as Json,
+      p_tolerance_days: entity.tolerance_days,
+      p_overdue_days: entity.overdue_days,
+      p_next_due_at: nextDueAt,
+    })
   }
 }

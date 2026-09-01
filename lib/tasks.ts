@@ -22,7 +22,7 @@ export type StepEventInput = EventType
 
 const STEP_EVENT_INPUTS: readonly StepEventInput[] = [
   "done", "edited", "notified", "offered", "accepted",
-  "skipped", "nudged_back", "nudged_forward", "stopped", "why",
+  "skipped", "nudged_back", "nudged_forward", "stopped", "why", "stop_note",
 ]
 
 export function isStepEventInput(value: string): value is StepEventInput {
@@ -69,4 +69,27 @@ export type LifeWalkExtractedThing = {
   notify_time_of_day?: NotifyTimeOfDay | null
   notify_escalate?: boolean
   steps: LifeWalkExtractedStep[]
+}
+
+/**
+ * Shape Claude returns for a single recurring care entity.
+ * Matches the fields accepted by the insert_entity_with_care_plan RPC
+ * (via /api/entities). The LLM supplies seasonal intervals directly so
+ * no second model call is needed.
+ */
+export type LifeWalkExtractedEntity = {
+  name: string
+  kind: string
+  location: string | null
+  action: string
+  /** Monthly intervals: keys "1"–"12", values are integer days. */
+  intervals: Record<string, number>
+  tolerance_days: number
+  overdue_days: number
+}
+
+/** Combined result returned by a single Life Walk extraction pass. */
+export type LifeWalkExtractionResult = {
+  things: LifeWalkExtractedThing[]
+  entities: LifeWalkExtractedEntity[]
 }

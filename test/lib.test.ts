@@ -16,7 +16,7 @@ import {
   saveCapturedThings,
 } from "@/lib/capture"
 import { getSupabasePublishableKey, getSupabaseUrl, getEncryptionKey, hasSupabaseEnv } from "@/lib/env"
-import { parseLifeWalkThingsFromModelText } from "@/lib/lifewalk-parse"
+import { parseLifeWalkResultFromModelText } from "@/lib/lifewalk-parse"
 import {
   parseRecurrenceRule,
   calculateNextDue,
@@ -333,77 +333,71 @@ describe("env helpers", () => {
 })
 
 describe("lifewalk parser", () => {
-  it("parses plain arrays, fenced json, and wrapped object payloads", () => {
-    const parsed = parseLifeWalkThingsFromModelText(
-      '```json\n[{"name":"Test","class":"project","domain":"home","due_date":null,"notify_window":null,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Do it","band":"run","mode":"thinking","shape":"bleeds","needs_know_how":false}]}]\n```',
-    )
-    expect(parsed[0].steps[0]).toMatchObject({ band: "run", mode: "thinking", shape: "bleeds" })
-    expect(parsed[0].domain).toBe("home")
-    expect(parsed[0].due_date).toBeNull()
+  // Helper: wrap a things array in the envelope the parser now expects
+  function envelope(things: unknown[], entities: unknown[] = []) {
+    return JSON.stringify({ things, entities })
+  }
 
-    const wrapped = parseLifeWalkThingsFromModelText(
-      'prefix {"things":[{"name":" Another ","class":"other","notify_window":2,"steps":[{"name":" Step ","band":"bad","mode":"bad","shape":"bad"}]}]} suffix',
+  const validThing = { name: "Thing", class: "project", steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean" }] }
+
+  it("parses fenced json and wrapped object payloads", () => {
+    const fenced = parseLifeWalkResultFromModelText(
+      '```json\n' + envelope([{ name: "Test", class: "project", domain: "home", due_date: null, notify_window: null, notify_time_of_day: "morning", notify_escalate: true, steps: [{ name: "Do it", band: "run", mode: "thinking", shape: "bleeds", needs_know_how: false }] }]) + '\n```',
     )
-    expect(wrapped[0]).toMatchObject({ name: "Another", class: "project", notify_window: 2 })
-    expect(wrapped[0].steps[0]).toMatchObject({ name: "Step", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false })
-    // No recurrence_rule or next_due on steps
-    expect(wrapped[0].steps[0]).not.toHaveProperty("recurrence_rule")
-    expect(wrapped[0].steps[0]).not.toHaveProperty("next_due")
+    expect(fenced.things[0].steps[0]).toMatchObject({ band: "run", mode: "thinking", shape: "bleeds" })
+    expect(fenced.things[0].domain).toBe("home")
+    expect(fenced.things[0].due_date).toBeNull()
+
+    const wrapped = parseLifeWalkResultFromModelText(
+      'prefix ' + envelope([{ name: " Another ", class: "other", notify_window: 2, steps: [{ name: " Step ", band: "bad", mode: "bad", shape: "bad" }] }]) + ' suffix',
+    )
+    expect(wrapped.things[0]).toMatchObject({ name: "Another", class: "project", notify_window: 2 })
+    expect(wrapped.things[0].steps[0]).toMatchObject({ name: "Step", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false })
+    expect(wrapped.things[0].steps[0]).not.toHaveProperty("recurrence_rule")
+    expect(wrapped.things[0].steps[0]).not.toHaveProperty("next_due")
   })
 
   it("throws on invalid payloads", () => {
-    expect(() => parseLifeWalkThingsFromModelText("hello")).toThrow("No JSON array found")
-    expect(() => parseLifeWalkThingsFromModelText("[]")).toThrow("No valid things in model response")
+    expect(() => parseLifeWalkResultFromModelText("hello")).toThrow("No JSON object found")
+    expect(() => parseLifeWalkResultFromModelText(envelope([]))).toThrow("No valid things in model response")
   })
 
   it("filters null/non-object items in array (lib/lifewalk-parse.ts:100,138)", () => {
-    // normalizeThing(null) → returns null → if(thing) false branch at line 138
-    // list includes one valid thing and one null → only one makes it through
-    const validThing = { name: "Thing", class: "project", steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean" }] }
-    const jsonWithNull = JSON.stringify([null, validThing])
-    const result = parseLifeWalkThingsFromModelText(jsonWithNull)
-    expect(result).toHaveLength(1)
-    expect(result[0].name).toBe("Thing")
+    const result = parseLifeWalkResultFromModelText(envelope([null, validThing]))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].name).toBe("Thing")
   })
 
   it("filters items where name is not a string (lib/lifewalk-parse.ts:103)", () => {
-    // typeof item.name !== "string" → name="" → !name → null
-    const validThing = { name: "Thing", class: "project", steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean" }] }
     const noName = { class: "project", steps: [{ name: "Step" }] }
-    const result = parseLifeWalkThingsFromModelText(JSON.stringify([noName, validThing]))
-    expect(result).toHaveLength(1)
+    const result = parseLifeWalkResultFromModelText(envelope([noName, validThing]))
+    expect(result.things).toHaveLength(1)
   })
 
   it("filters items where all steps are invalid — normalizeThing returns null (lib/lifewalk-parse.ts:110,114)", () => {
-    // step with no name → normalizeStep returns null → step = null → if(step) false
-    // then steps.length === 0 → normalizeThing returns null
-    const validThing = { name: "Thing", class: "project", steps: [{ name: "Step", band: "short" }] }
-    const badSteps = { name: "BadThing", class: "project", steps: [{ band: "short" }] } // no name
-    const result = parseLifeWalkThingsFromModelText(JSON.stringify([badSteps, validThing]))
-    expect(result).toHaveLength(1)
-    expect(result[0].name).toBe("Thing")
+    const badSteps = { name: "BadThing", class: "project", steps: [{ band: "short" }] }
+    const result = parseLifeWalkResultFromModelText(envelope([badSteps, validThing]))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].name).toBe("Thing")
   })
 
   it("normalizeStep returns null for null/non-object step (lib/lifewalk-parse.ts:58)", () => {
-    // !raw || typeof raw !== "object" → null step → if(step) false → filtered out
     const thingWithNullStep = { name: "Thing", class: "project", steps: [null, { name: "Step", band: "short" }] }
-    const result = parseLifeWalkThingsFromModelText(JSON.stringify([thingWithNullStep]))
-    expect(result).toHaveLength(1)
-    expect(result[0].steps).toHaveLength(1) // null step filtered out
+    const result = parseLifeWalkResultFromModelText(envelope([thingWithNullStep]))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].steps).toHaveLength(1)
   })
 
   it("handles non-array steps property (lib/lifewalk-parse.ts:107 false branch)", () => {
-    // item.steps is not an array → Array.isArray false → steps = [] → steps.length === 0 → null
-    const validThing = { name: "Thing", class: "project", steps: [{ name: "Step" }] }
     const nonArraySteps = { name: "BadThing", class: "project", steps: "not-array" }
-    const result = parseLifeWalkThingsFromModelText(JSON.stringify([nonArraySteps, validThing]))
-    expect(result).toHaveLength(1)
-    expect(result[0].name).toBe("Thing")
+    const result = parseLifeWalkResultFromModelText(envelope([nonArraySteps, validThing]))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].name).toBe("Thing")
   })
 
-  it("handles non-array payload returned by extractJsonPayload (lib/lifewalk-parse.ts:133)", () => {
-    // JSON.parse of "{}" succeeds and is not an array → list = []
-    expect(() => parseLifeWalkThingsFromModelText("{}")).toThrow("No valid things in model response")
+  it("handles missing things/entities keys — both default to empty, then throws", () => {
+    // An object with no things/entities keys → both lists empty → throws
+    expect(() => parseLifeWalkResultFromModelText("{}")).toThrow("No valid things in model response")
   })
 })
 

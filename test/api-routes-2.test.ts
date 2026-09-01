@@ -16,8 +16,8 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: MockAnthropic }
 })
 vi.mock("@/lib/lifewalk-parse", () => ({
-  parseLifeWalkThingsFromModelText: vi.fn(),
-  extractThingsFromNarration: vi.fn(),
+  parseLifeWalkResultFromModelText: vi.fn(),
+  extractFromNarration: vi.fn(),
 }))
 vi.mock("@/lib/seed-care-plan", () => ({ seedCarePlan: vi.fn() }))
 vi.mock("@/lib/supabase/server-service", () => ({ createClient: vi.fn(() => ({})) }))
@@ -27,7 +27,7 @@ vi.mock("@/lib/invites", () => ({ acceptInvite: vi.fn() }))
 vi.mock("@/lib/ai-gateway", () => ({ resolveAiGateway: vi.fn() }))
 
 import { getAuthenticatedContext } from "@/lib/api/session"
-import { parseLifeWalkThingsFromModelText, extractThingsFromNarration } from "@/lib/lifewalk-parse"
+import { parseLifeWalkResultFromModelText, extractFromNarration } from "@/lib/lifewalk-parse"
 import { seedCarePlan } from "@/lib/seed-care-plan"
 import { createClient as createServiceClient } from "@/lib/supabase/server-service"
 import { createClient as createServerClient } from "@/lib/supabase/server"
@@ -155,7 +155,7 @@ describe("POST /api/lifewalk", async () => {
   beforeEach(async () => {
     const create = await getAnthropicCreate()
     create.mockReset()
-    vi.mocked(extractThingsFromNarration).mockReset()
+    vi.mocked(extractFromNarration).mockReset()
   })
 
   it("returns 401 when not authenticated", async () => {
@@ -193,15 +193,39 @@ describe("POST /api/lifewalk", async () => {
     expect(res.status).toBe(503)
   })
 
-  it("returns things on success", async () => {
+  it("returns things and saved entities on success", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "Thing", class: "project", steps: [] }]
-    vi.mocked(extractThingsFromNarration).mockResolvedValue(things as unknown as ReturnType<typeof parseLifeWalkThingsFromModelText>)
+    vi.mocked(extractFromNarration).mockResolvedValue({
+      things: things as unknown as ReturnType<typeof parseLifeWalkResultFromModelText>["things"],
+      entities: [],
+    })
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(200)
     const data = await res.json()
     expect(data.things).toEqual(things)
+    expect(data.entities).toEqual([])
+  })
+
+  it("saves entities via RPC and returns their ids", async () => {
+    const rpcFn = vi.fn(async () => ({ data: { entity_id: "e1", plan_id: "p1" }, error: null }))
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({ rpc: rpcFn }))
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    const entity = {
+      name: "Peace lily", kind: "plant", location: "bedroom", action: "Water",
+      intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity] })
+    const res = await POST(jsonReq("http://localhost", { transcript: "water peace lily" }))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.entities).toEqual([{ entity_id: "e1", name: "Peace lily" }])
+    expect(rpcFn).toHaveBeenCalledWith(
+      "insert_entity_with_care_plan",
+      expect.objectContaining({ p_name: "Peace lily" }),
+    )
   })
 
   it("returns 500 when AI returns no text block", async () => {
@@ -210,7 +234,7 @@ describe("POST /api/lifewalk", async () => {
     const { default: Anthropic } = await import("@anthropic-ai/sdk")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const APIError = (Anthropic as unknown as any).APIError
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new APIError("unexpected", 500))
+    vi.mocked(extractFromNarration).mockRejectedValue(new APIError("unexpected", 500))
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(500)
   })
@@ -221,7 +245,7 @@ describe("POST /api/lifewalk", async () => {
     const { default: Anthropic } = await import("@anthropic-ai/sdk")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const APIError = (Anthropic as unknown as any).APIError
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new APIError("quota", 429))
+    vi.mocked(extractFromNarration).mockRejectedValue(new APIError("quota", 429))
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(429)
   })
@@ -232,7 +256,7 @@ describe("POST /api/lifewalk", async () => {
     const { default: Anthropic } = await import("@anthropic-ai/sdk")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const APIError = (Anthropic as unknown as any).APIError
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new APIError("bad", null))
+    vi.mocked(extractFromNarration).mockRejectedValue(new APIError("bad", null))
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(502)
   })
@@ -240,17 +264,17 @@ describe("POST /api/lifewalk", async () => {
   it("returns 500 with parse error message when extraction throws JSON parse error", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new Error("No JSON array found in model response"))
+    vi.mocked(extractFromNarration).mockRejectedValue(new Error("No JSON object found in model response"))
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(500)
     const data = await res.json()
-    expect(data.error).toBe("No JSON array found in model response")
+    expect(data.error).toBe("No JSON object found in model response")
   })
 
   it("returns 500 with the raw error message for generic errors", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new Error("some other failure"))
+    vi.mocked(extractFromNarration).mockRejectedValue(new Error("some other failure"))
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(500)
     const data = await res.json()
@@ -369,7 +393,7 @@ describe("POST /api/capture/voice", async () => {
   beforeEach(async () => {
     vi.mocked(resolveAiGateway).mockReset()
     vi.mocked(persistThings).mockReset()
-    vi.mocked(extractThingsFromNarration).mockReset()
+    vi.mocked(extractFromNarration).mockReset()
     const create = await getAnthropicCreate()
     create.mockReset()
   })
@@ -427,7 +451,7 @@ describe("POST /api/capture/voice", async () => {
   it("returns 502 when extraction throws an Error", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new Error("AI fail"))
+    vi.mocked(extractFromNarration).mockRejectedValue(new Error("AI fail"))
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(502)
   })
@@ -435,15 +459,15 @@ describe("POST /api/capture/voice", async () => {
   it("returns 502 on non-Error AI throw", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractThingsFromNarration).mockRejectedValue("raw")
+    vi.mocked(extractFromNarration).mockRejectedValue("raw")
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(502)
   })
 
-  it("returns 422 when no things extracted", async () => {
+  it("returns 422 when no things or entities extracted", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractThingsFromNarration).mockResolvedValue([])
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [] })
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(422)
   })
@@ -452,7 +476,7 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
-    vi.mocked(extractThingsFromNarration).mockResolvedValue(things)
+    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [] })
     vi.mocked(persistThings).mockResolvedValue({ saved: [{ thing_id: "t1", name: "T" }] })
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(201)
@@ -462,7 +486,7 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
-    vi.mocked(extractThingsFromNarration).mockResolvedValue(things)
+    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [] })
     vi.mocked(persistThings).mockRejectedValue(new Error("save fail"))
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(500)
@@ -472,7 +496,7 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
-    vi.mocked(extractThingsFromNarration).mockResolvedValue(things)
+    vi.mocked(extractFromNarration).mockResolvedValue({ things, entities: [] })
     vi.mocked(persistThings).mockRejectedValue("raw")
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(500)
@@ -600,7 +624,7 @@ describe("POST /api/lifewalk — branch coverage", async () => {
 
   beforeEach(() => {
     vi.mocked(resolveAiGateway).mockReset()
-    vi.mocked(extractThingsFromNarration).mockReset()
+    vi.mocked(extractFromNarration).mockReset()
   })
 
   it("returns fallback error message when APIError has empty message", async () => {
@@ -609,7 +633,7 @@ describe("POST /api/lifewalk — branch coverage", async () => {
     const { default: Anthropic } = await import("@anthropic-ai/sdk")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const APIError = (Anthropic as unknown as any).APIError
-    vi.mocked(extractThingsFromNarration).mockRejectedValue(new APIError("", 400))
+    vi.mocked(extractFromNarration).mockRejectedValue(new APIError("", 400))
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(400)
     const data = await res.json()
@@ -619,7 +643,7 @@ describe("POST /api/lifewalk — branch coverage", async () => {
   it("returns 500 with 'Could not parse things' when non-Error thrown in extraction", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    vi.mocked(extractThingsFromNarration).mockRejectedValue("raw error")
+    vi.mocked(extractFromNarration).mockRejectedValue("raw error")
     const res = await POST(jsonReq("http://localhost", { transcript: "do stuff" }))
     expect(res.status).toBe(500)
     const data = await res.json()
