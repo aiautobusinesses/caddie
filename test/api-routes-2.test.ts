@@ -208,7 +208,7 @@ describe("POST /api/lifewalk", async () => {
     expect(data.entities).toEqual([])
   })
 
-  it("saves entities via RPC and returns their ids", async () => {
+  it("saves entities via RPC and returns their ids without entities_dropped on success", async () => {
     const rpcFn = vi.fn(async () => ({ data: { entity_id: "e1", plan_id: "p1" }, error: null }))
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({ rpc: rpcFn }))
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
@@ -222,10 +222,28 @@ describe("POST /api/lifewalk", async () => {
     expect(res.status).toBe(200)
     const data = await res.json()
     expect(data.entities).toEqual([{ entity_id: "e1", name: "Peace lily" }])
+    expect(data.entities_dropped).toBeUndefined()
     expect(rpcFn).toHaveBeenCalledWith(
       "insert_entity_with_care_plan",
       expect.objectContaining({ p_name: "Peace lily" }),
     )
+  })
+
+  it("returns entities_dropped count when an entity RPC fails", async () => {
+    const rpcFn = vi.fn(async () => ({ data: null, error: { message: "constraint violation" } }))
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({ rpc: rpcFn }))
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    const entity = {
+      name: "Fern", kind: "plant", location: null, action: "Water",
+      intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity] })
+    const res = await POST(jsonReq("http://localhost", { transcript: "water fern" }))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.entities).toEqual([])
+    expect(data.entities_dropped).toBe(1)
   })
 
   it("returns 500 when AI returns no text block", async () => {
@@ -472,7 +490,7 @@ describe("POST /api/capture/voice", async () => {
     expect(res.status).toBe(422)
   })
 
-  it("returns 201 on success", async () => {
+  it("returns 201 on success without entities_dropped when no entities", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
@@ -480,6 +498,28 @@ describe("POST /api/capture/voice", async () => {
     vi.mocked(persistThings).mockResolvedValue({ saved: [{ thing_id: "t1", name: "T" }] })
     const res = await POST(voiceReq({ text: "hi" }))
     expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.entities_dropped).toBeUndefined()
+  })
+
+  it("returns entities_dropped count when an entity RPC fails", async () => {
+    const rpcFn = vi.fn(async () => ({ data: null, error: { message: "db error" } }))
+    vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    const entity = {
+      name: "Fern", kind: "plant", location: null, action: "Water",
+      intervals: { "1": 14, "2": 14, "3": 10, "4": 7, "5": 7, "6": 7, "7": 7, "8": 7, "9": 10, "10": 14, "11": 14, "12": 14 },
+      tolerance_days: 2, overdue_days: 5,
+    }
+    vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [entity] })
+    vi.mocked(persistThings).mockResolvedValue({ saved: [] })
+    // Override the service client's rpc for the entity insert
+    const supabaseWithRpc = { ...makeServiceClient(), rpc: rpcFn }
+    vi.mocked(createServiceClient).mockReturnValue(supabaseWithRpc as unknown as ReturnType<typeof createServiceClient>)
+    const res = await POST(voiceReq({ text: "water fern" }))
+    expect(res.status).toBe(201)
+    const data = await res.json()
+    expect(data.entities_dropped).toBe(1)
   })
 
   it("returns 500 when persistThings throws", async () => {

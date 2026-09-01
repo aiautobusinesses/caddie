@@ -9,15 +9,42 @@ import type { LifeWalkExtractedEntity } from "@/lib/tasks"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 
+// ── Design rule ───────────────────────────────────────────────────────────────
+// Entities are facts about the world (the peace lily exists regardless of the
+// user's task list) and are saved to the database immediately. Things are
+// proposals: they are returned to the client for the review screen and only
+// saved when the user confirms. This is why:
+//   - cancel on the review screen does not undo entities
+//   - this route returns { things, entities } while /api/entities returns full
+//     plan details for post-save editing — two paths, deliberately different shapes
+// Do not "fix" the asymmetry by deferring entity saves to the review confirm
+// step — you will lose the plants.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SaveEntitiesResult = {
+  saved: { entity_id: string; name: string }[]
+  dropped: number
+}
+
 async function saveEntities(
   supabase: SupabaseClient<Database>,
   userId: string,
   entities: LifeWalkExtractedEntity[],
-): Promise<{ entity_id: string; name: string }[]> {
+): Promise<SaveEntitiesResult> {
   const saved: { entity_id: string; name: string }[] = []
+  let dropped = 0
+
   for (const entity of entities) {
     const intervals = parseIntervals(entity.intervals)
-    if (!intervals) continue
+    if (!intervals) {
+      // normalizeEntity already called parseIntervals at parse time, so reaching
+      // here is a logic error. Log loudly so it surfaces rather than silently
+      // losing an item.
+      console.error("[lifewalk] BUG: entity intervals invalid after parse (should be unreachable):", entity.name)
+      dropped++
+      continue
+    }
+
     const nextDueAt = computeInitialNextDueAt(intervals)
     const { data: rpcResult, error } = await supabase.rpc("insert_entity_with_care_plan", {
       p_user_id: userId,
@@ -30,15 +57,20 @@ async function saveEntities(
       p_overdue_days: entity.overdue_days,
       p_next_due_at: nextDueAt,
     })
-    if (!error && rpcResult) {
+
+    if (error) {
+      console.error("[lifewalk] entity save error:", entity.name, error.message)
+      dropped++
+      continue
+    }
+
+    if (rpcResult) {
       const { entity_id } = rpcResult as { entity_id: string; plan_id: string }
       saved.push({ entity_id, name: entity.name })
     }
-    // Non-fatal: log and continue so a single bad entity doesn't block all things
-    /* v8 ignore next */
-    if (error) console.error("[lifewalk] entity save error:", error.message)
   }
-  return saved
+
+  return { saved, dropped }
 }
 
 export async function POST(req: NextRequest) {
@@ -64,8 +96,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const { things, entities } = await extractFromNarration(gateway.client, transcript)
-    const savedEntities = await saveEntities(auth.supabase, auth.user.id, entities)
-    return NextResponse.json({ things, entities: savedEntities })
+    const { saved: savedEntities, dropped } = await saveEntities(auth.supabase, auth.user.id, entities)
+    return NextResponse.json({
+      things,
+      entities: savedEntities,
+      ...(dropped > 0 ? { entities_dropped: dropped } : {}),
+    })
   } catch (error) {
     if (error instanceof Anthropic.APIError) {
       return NextResponse.json(

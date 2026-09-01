@@ -76,23 +76,38 @@ export async function POST(request: NextRequest) {
   // ── Persist via service role (integration context — no session cookie) ────
   try {
     const result = await persistThings(supabase, things, { source: "voice", userId })
-    await saveEntities(supabase as unknown as SupabaseClient<Database>, userId, entities)
-    return NextResponse.json({ saved: result.saved }, { status: 201 })
+    const { dropped } = await saveEntities(supabase as unknown as SupabaseClient<Database>, userId, entities)
+    return NextResponse.json({
+      saved: result.saved,
+      ...(dropped > 0 ? { entities_dropped: dropped } : {}),
+    }, { status: 201 })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to save" }, { status: 500 })
   }
 }
 
+type SaveEntitiesResult = { dropped: number }
+
 async function saveEntities(
   supabase: SupabaseClient<Database>,
   userId: string,
   entities: LifeWalkExtractedEntity[],
-): Promise<void> {
+): Promise<SaveEntitiesResult> {
+  let dropped = 0
+
   for (const entity of entities) {
     const intervals = parseIntervals(entity.intervals)
-    if (!intervals) continue
+    if (!intervals) {
+      // normalizeEntity already called parseIntervals at parse time, so reaching
+      // here is a logic error. Log loudly so it surfaces rather than silently
+      // losing an item.
+      console.error("[voice] BUG: entity intervals invalid after parse (should be unreachable):", entity.name)
+      dropped++
+      continue
+    }
+
     const nextDueAt = computeInitialNextDueAt(intervals)
-    await supabase.rpc("insert_entity_with_care_plan", {
+    const { error } = await supabase.rpc("insert_entity_with_care_plan", {
       p_user_id: userId,
       p_name: entity.name,
       p_kind: entity.kind,
@@ -103,5 +118,12 @@ async function saveEntities(
       p_overdue_days: entity.overdue_days,
       p_next_due_at: nextDueAt,
     })
+
+    if (error) {
+      console.error("[voice] entity save error:", entity.name, error.message)
+      dropped++
+    }
   }
+
+  return { dropped }
 }
