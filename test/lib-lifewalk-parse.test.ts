@@ -138,7 +138,19 @@ describe("parseLifeWalkResultFromModelText", () => {
     expect(result.things[0].class).toBe("project")
   })
 
-  it("keeps obligation with a due_date as obligation", () => {
+  it("coerces obligation with due_date but no notify_window to project", () => {
+    const noWindowObligation = {
+      ...VALID_THING,
+      class: "obligation",
+      due_date: "2026-03-15",
+      notify_window: null,
+    }
+    const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [noWindowObligation], entities: [] }))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].class).toBe("project")
+  })
+
+  it("keeps obligation with both due_date and notify_window as obligation", () => {
     const datedObligation = {
       ...VALID_THING,
       class: "obligation",

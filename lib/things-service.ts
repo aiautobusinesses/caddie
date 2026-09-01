@@ -275,18 +275,17 @@ export async function nudgeStep(
     if (reopenError) throw new Error(reopenError.message)
   } else {
     // Mark done: the current step and every undone step between current and
-    // target (exclusive).  These are steps the user says they already completed.
-    const stepsToDone = steps.filter(
-      (s) => s.step_order >= currentStep.step_order && s.step_order < targetStep.step_order && !s.done,
-    )
-    for (const s of stepsToDone) {
-      const { error: doneError } = await supabase
-        .from("steps")
-        .update({ done: true, done_at: new Date().toISOString() })
-        .eq("id", s.id)
-        .eq("user_id", userId)
-      if (doneError) throw new Error(doneError.message)
-    }
+    // target (exclusive) in one statement — atomically, so a mid-way failure
+    // cannot leave the chain half-marked with live_step_id unmoved.
+    const { error: doneError } = await supabase
+      .from("steps")
+      .update({ done: true, done_at: new Date().toISOString() })
+      .eq("thing_id", thingId)
+      .eq("user_id", userId)
+      .eq("done", false)
+      .gte("step_order", currentStep.step_order)
+      .lt("step_order", targetStep.step_order)
+    if (doneError) throw new Error(doneError.message)
   }
 
   // Move live_step_id to the target step.

@@ -406,7 +406,18 @@ describe("nudgeStep", () => {
         }
       }
       if (table === "steps") {
-        // SELECT steps, then UPDATE for reopen (back) or mark-done (forward)
+        // SELECT steps, then UPDATE for reopen (back) or mark-done (forward).
+        // The forward path chains: .update().eq().eq().eq().gte().lt()
+        // Build a fluent object that resolves to { error } at await time.
+        const stepUpdateChain: Record<string, unknown> = {}
+        const stepUpdateTerminal = vi.fn(async () => ({ error: stepUpdateError }))
+        const stepUpdateLink = vi.fn(() => stepUpdateChain)
+        stepUpdateChain.eq = stepUpdateLink
+        stepUpdateChain.gte = stepUpdateLink
+        stepUpdateChain.lt = stepUpdateTerminal
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(stepUpdateChain as any).then = ((resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ error: stepUpdateError }).then(resolve)) as unknown
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -415,11 +426,7 @@ describe("nudgeStep", () => {
               })),
             })),
           })),
-          update: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(async () => ({ error: stepUpdateError })),
-            })),
-          })),
+          update: vi.fn(() => stepUpdateChain),
         }
       }
       if (table === "things") {
@@ -463,8 +470,9 @@ describe("nudgeStep", () => {
     }))
   })
 
-  it("nudges forward: marks current step done before moving pointer", async () => {
-    // s1 is live and undone; s2 is target. The update must be called with done: true.
+  it("nudges forward: issues a range update with done: true (not a per-step loop)", async () => {
+    // The update must use done: true and be issued as a single range statement.
+    // We verify update() is called with done: true.
     let stepUpdateArgs: Record<string, unknown> | null = null
     let fromCallCount = 0
     const from = vi.fn((table: string) => {
@@ -481,6 +489,12 @@ describe("nudgeStep", () => {
         }
       }
       if (table === "steps") {
+        const chain: Record<string, unknown> = {}
+        const end = vi.fn(async () => ({ error: null }))
+        const link = vi.fn(() => chain)
+        chain.eq = link; chain.gte = link; chain.lt = end
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(chain as any).then = (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r)
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -495,16 +509,11 @@ describe("nudgeStep", () => {
               })),
             })),
           })),
-          update: vi.fn((args: Record<string, unknown>) => {
-            stepUpdateArgs = args
-            return { eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) }
-          }),
+          update: vi.fn((args: Record<string, unknown>) => { stepUpdateArgs = args; return chain }),
         }
       }
       if (table === "things") {
-        return {
-          update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) })),
-        }
+        return { update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) })) }
       }
       return { insert: vi.fn(async () => ({ error: null })) }
     })
@@ -513,12 +522,11 @@ describe("nudgeStep", () => {
     expect(stepUpdateArgs).toMatchObject({ done: true })
   })
 
-  it("nudges forward: does not mark the target step done (only steps before it)", async () => {
-    // target-finding picks the first undone step after current, so nothing between
-    // current and target can be undone — the filter s.step_order < target.step_order
-    // ensures target itself is never in stepsToDone.
-    // Verify by checking s2 (the target) is NOT marked done.
-    let markedDoneIds: string[] = []
+  it("nudges forward: range upper bound excludes the target step (step_order < target)", async () => {
+    // The .lt() call must receive targetStep.step_order so the target is never
+    // marked done by the range update. s1 live (order 1), s2 target (order 2) —
+    // .lt() must be called with 2.
+    let ltArg: unknown = null
     let fromCallCount = 0
     const from = vi.fn((table: string) => {
       fromCallCount++
@@ -534,6 +542,12 @@ describe("nudgeStep", () => {
         }
       }
       if (table === "steps") {
+        const chain: Record<string, unknown> = {}
+        const end = vi.fn(async (_col: string, val: unknown) => { ltArg = val; return { error: null } })
+        const link = vi.fn(() => chain)
+        chain.eq = link; chain.gte = link; chain.lt = end
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(chain as any).then = (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r)
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -548,25 +562,18 @@ describe("nudgeStep", () => {
               })),
             })),
           })),
-          update: vi.fn(() => ({
-            eq: vi.fn((col: string, val: string) => {
-              if (col === "id") markedDoneIds.push(val)
-              return { eq: vi.fn(async () => ({ error: null })) }
-            }),
-          })),
+          update: vi.fn(() => chain),
         }
       }
       if (table === "things") {
-        return {
-          update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) })),
-        }
+        return { update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) })) }
       }
       return { insert: vi.fn(async () => ({ error: null })) }
     })
     const supabase = { from } as unknown as Parameters<typeof nudgeStep>[0]
     await nudgeStep(supabase, "t1", "u1", "forward")
-    expect(markedDoneIds).toContain("s1")
-    expect(markedDoneIds).not.toContain("s2")
+    // targetStep.step_order is 2 — .lt("step_order", 2) excludes s2 from the update
+    expect(ltArg).toBe(2)
   })
 
   it("nudges forward: skips already-done intermediate steps (does not re-mark them)", async () => {
