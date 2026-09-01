@@ -110,12 +110,9 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
    * Handle Done / Still Going.
    *
    * When stillGoing is true:
-   *   1. Record a `stopped` event immediately (non-blocking on the UI transition).
-   *   2. Call the still-going route to clear `started_at`.
-   *   3. Transition to the `stop_note` screen — the user can annotate or skip.
-   *
-   * The stop event is post-tap and non-blocking: if the API call fails the note
-   * screen still appears, preserving the user's intent to stop without nagging.
+   *   1. Call the still-going route to clear `started_at` — it also writes the
+   *      `stopped` event server-side (markThingStillGoing). No second write here.
+   *   2. Transition to the `stop_note` screen — the user can annotate or skip.
    */
   async function handleDone(stillGoing: boolean) {
     if (!inProgress) return
@@ -124,14 +121,7 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     if (stillGoing) {
       const stepId = inProgress.step_id
 
-      // Record the stopped event immediately — fire and forget.
-      void fetch(`/api/steps/${stepId}/event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_type: "stopped" }),
-      })
-
-      // Clear started_at via the done route with still_going: true.
+      // Clear started_at and record the stopped event in one server call.
       void fetch(`/api/things/${inProgress.thing_id}/done`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
