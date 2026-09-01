@@ -381,7 +381,7 @@ describe("nudgeStep", () => {
     thingError = null as { message: string } | null,
     stepsError = null as { message: string } | null,
     stepsData = STEPS as { id: string; step_order: number; done: boolean }[] | null,
-    reopenError = null as { message: string } | null,
+    stepUpdateError = null as { message: string } | null,
     updateThingError = null as { message: string } | null,
     insertError = null as { message: string } | null,
   } = {}) {
@@ -406,7 +406,7 @@ describe("nudgeStep", () => {
         }
       }
       if (table === "steps") {
-        // SELECT steps ordered by step_order, then possible UPDATE for reopen
+        // SELECT steps, then UPDATE for reopen (back) or mark-done (forward)
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
@@ -417,7 +417,7 @@ describe("nudgeStep", () => {
           })),
           update: vi.fn(() => ({
             eq: vi.fn(() => ({
-              eq: vi.fn(async () => ({ error: reopenError })),
+              eq: vi.fn(async () => ({ error: stepUpdateError })),
             })),
           })),
         }
@@ -439,7 +439,7 @@ describe("nudgeStep", () => {
     return { supabase: { from } as unknown as Parameters<typeof nudgeStep>[0], insertFn }
   }
 
-  it("nudges back: moves live_step_id to previous step and writes nudged_back event", async () => {
+  it("nudges back: writes nudged_back event with to: target metadata", async () => {
     const { supabase, insertFn } = makeNudgeSupabase({ liveStepId: "s1" })
     const result = await nudgeStep(supabase, "t1", "u1", "back")
     expect(result).toEqual({ ok: true })
@@ -447,10 +447,11 @@ describe("nudgeStep", () => {
       step_id: "s1",
       thing_id: "t1",
       event_type: "nudged_back",
+      metadata: { to: "s0" },
     }))
   })
 
-  it("nudges forward: moves live_step_id to next undone step and writes nudged_forward event", async () => {
+  it("nudges forward: writes nudged_forward event with to: target metadata", async () => {
     const { supabase, insertFn } = makeNudgeSupabase({ liveStepId: "s1" })
     const result = await nudgeStep(supabase, "t1", "u1", "forward")
     expect(result).toEqual({ ok: true })
@@ -458,6 +459,129 @@ describe("nudgeStep", () => {
       step_id: "s1",
       thing_id: "t1",
       event_type: "nudged_forward",
+      metadata: { to: "s2" },
+    }))
+  })
+
+  it("nudges forward: marks current step done before moving pointer", async () => {
+    // s1 is live and undone; s2 is target. The update must be called with done: true.
+    let stepUpdateArgs: Record<string, unknown> | null = null
+    let fromCallCount = 0
+    const from = vi.fn((table: string) => {
+      fromCallCount++
+      if (table === "things" && fromCallCount === 1) {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({ data: { id: "t1", live_step_id: "s1" }, error: null })),
+              })),
+            })),
+          })),
+        }
+      }
+      if (table === "steps") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: vi.fn(async () => ({
+                  data: [
+                    { id: "s1", step_order: 1, done: false },
+                    { id: "s2", step_order: 2, done: false },
+                  ],
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+          update: vi.fn((args: Record<string, unknown>) => {
+            stepUpdateArgs = args
+            return { eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) }
+          }),
+        }
+      }
+      if (table === "things") {
+        return {
+          update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) })),
+        }
+      }
+      return { insert: vi.fn(async () => ({ error: null })) }
+    })
+    const supabase = { from } as unknown as Parameters<typeof nudgeStep>[0]
+    await nudgeStep(supabase, "t1", "u1", "forward")
+    expect(stepUpdateArgs).toMatchObject({ done: true })
+  })
+
+  it("nudges forward: does not mark the target step done (only steps before it)", async () => {
+    // target-finding picks the first undone step after current, so nothing between
+    // current and target can be undone — the filter s.step_order < target.step_order
+    // ensures target itself is never in stepsToDone.
+    // Verify by checking s2 (the target) is NOT marked done.
+    let markedDoneIds: string[] = []
+    let fromCallCount = 0
+    const from = vi.fn((table: string) => {
+      fromCallCount++
+      if (table === "things" && fromCallCount === 1) {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({ data: { id: "t1", live_step_id: "s1" }, error: null })),
+              })),
+            })),
+          })),
+        }
+      }
+      if (table === "steps") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                order: vi.fn(async () => ({
+                  data: [
+                    { id: "s1", step_order: 1, done: false },
+                    { id: "s2", step_order: 2, done: false },
+                  ],
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+          update: vi.fn(() => ({
+            eq: vi.fn((col: string, val: string) => {
+              if (col === "id") markedDoneIds.push(val)
+              return { eq: vi.fn(async () => ({ error: null })) }
+            }),
+          })),
+        }
+      }
+      if (table === "things") {
+        return {
+          update: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })) })),
+        }
+      }
+      return { insert: vi.fn(async () => ({ error: null })) }
+    })
+    const supabase = { from } as unknown as Parameters<typeof nudgeStep>[0]
+    await nudgeStep(supabase, "t1", "u1", "forward")
+    expect(markedDoneIds).toContain("s1")
+    expect(markedDoneIds).not.toContain("s2")
+  })
+
+  it("nudges forward: skips already-done intermediate steps (does not re-mark them)", async () => {
+    // s1 live, s2 already done, s3 target — only s1 needs marking done, not s2.
+    const stepsData = [
+      { id: "s1", step_order: 1, done: false },
+      { id: "s2", step_order: 2, done: true },
+      { id: "s3", step_order: 3, done: false },
+    ]
+    const { supabase, insertFn } = makeNudgeSupabase({ liveStepId: "s1", stepsData })
+    const result = await nudgeStep(supabase, "t1", "u1", "forward")
+    expect(result).toEqual({ ok: true })
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({
+      event_type: "nudged_forward",
+      metadata: { to: "s3" },
     }))
   })
 
@@ -486,21 +610,14 @@ describe("nudgeStep", () => {
     await expect(nudgeStep(supabase, "t1", "u1", "forward")).rejects.toMatchObject({ status: 400 })
   })
 
-  it("skips forward over already-done steps", async () => {
-    // s1 is live; s2 is done; s3 is undone — forward should land on s3, not s2.
-    const stepsData = [
-      { id: "s1", step_order: 1, done: false },
-      { id: "s2", step_order: 2, done: true },
-      { id: "s3", step_order: 3, done: false },
-    ]
-    const { supabase, insertFn } = makeNudgeSupabase({ liveStepId: "s1", stepsData })
-    await nudgeStep(supabase, "t1", "u1", "forward")
-    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "nudged_forward" }))
+  it("throws on step update error when nudging back (reopen)", async () => {
+    const { supabase } = makeNudgeSupabase({ liveStepId: "s1", stepUpdateError: { message: "reopen fail" } })
+    await expect(nudgeStep(supabase, "t1", "u1", "back")).rejects.toThrow("reopen fail")
   })
 
-  it("throws on reopen update error when nudging back", async () => {
-    const { supabase } = makeNudgeSupabase({ liveStepId: "s1", reopenError: { message: "reopen fail" } })
-    await expect(nudgeStep(supabase, "t1", "u1", "back")).rejects.toThrow("reopen fail")
+  it("throws on step update error when nudging forward (mark done)", async () => {
+    const { supabase } = makeNudgeSupabase({ liveStepId: "s1", stepUpdateError: { message: "done fail" } })
+    await expect(nudgeStep(supabase, "t1", "u1", "forward")).rejects.toThrow("done fail")
   })
 
   it("throws on live_step_id update error", async () => {

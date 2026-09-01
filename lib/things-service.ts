@@ -196,11 +196,19 @@ export type NudgeDirection = "back" | "forward"
  * next undone step).
  *
  * Nudge back:
- *   - Finds the nearest step with step_order < current, re-opens it (done=false),
- *     moves live_step_id to it, and writes a nudged_back event on the old step.
+ *   "Caddie is ahead of me" — the user hasn't done the current step yet.
+ *   Moves live_step_id to the nearest previous step and re-opens it (done=false).
+ *   Writes a nudged_back event against the old step.
+ *
  * Nudge forward:
- *   - Finds the nearest undone step with step_order > current, moves live_step_id
- *     to it, and writes a nudged_forward event on the old step.
+ *   "I already did that" — the user completed one or more steps outside Caddie.
+ *   Marks the current step done, marks every undone step between current and the
+ *   target done (steps the user implicitly skipped), then moves live_step_id to
+ *   the nearest undone step ahead.  Writes a nudged_forward event against the
+ *   original live step.
+ *
+ * Both events carry { to: targetStepId } in metadata so future pattern analysis
+ * can distinguish a one-step correction from a multi-step jump.
  *
  * Throws ServiceError(404) if the thing or its live step is not found.
  * Throws ServiceError(400) if there is no step to nudge to in that direction.
@@ -257,14 +265,28 @@ export async function nudgeStep(
     )
   }
 
-  // For nudge back: re-open the target step so it can be worked again.
   if (direction === "back") {
+    // Re-open the target step: the user is saying they haven't done it yet.
     const { error: reopenError } = await supabase
       .from("steps")
       .update({ done: false, done_at: null })
       .eq("id", targetStep.id)
       .eq("user_id", userId)
     if (reopenError) throw new Error(reopenError.message)
+  } else {
+    // Mark done: the current step and every undone step between current and
+    // target (exclusive).  These are steps the user says they already completed.
+    const stepsToDone = steps.filter(
+      (s) => s.step_order >= currentStep.step_order && s.step_order < targetStep.step_order && !s.done,
+    )
+    for (const s of stepsToDone) {
+      const { error: doneError } = await supabase
+        .from("steps")
+        .update({ done: true, done_at: new Date().toISOString() })
+        .eq("id", s.id)
+        .eq("user_id", userId)
+      if (doneError) throw new Error(doneError.message)
+    }
   }
 
   // Move live_step_id to the target step.
@@ -276,13 +298,14 @@ export async function nudgeStep(
   if (updateError) throw new Error(updateError.message)
 
   // Write the nudge event against the original live step.
+  // metadata.to records the target so future analysis can measure jump size.
   const eventType = direction === "back" ? "nudged_back" : "nudged_forward"
   const { error: eventError } = await supabase.from("step_events").insert({
     step_id: thing.live_step_id,
     thing_id: thingId,
     user_id: userId,
     event_type: eventType,
-    metadata: null,
+    metadata: { to: targetStep.id },
   })
   if (eventError) throw new Error(eventError.message)
 

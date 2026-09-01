@@ -280,7 +280,8 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
 
   // Design constraint: obligations surface ONLY inside their notify_window.
   // An obligation with no due_date or no notify_window has no defined activation
-  // moment and must not be offered at all — there is no factual reason to give.
+  // moment and must not be offered. (Parse-time coercion in normalizeThing ensures
+  // obligation rows always have a due_date; this guard is a safety net.)
   const obligations = available.filter((thing) => {
     if (thing.class !== "obligation") return false
     if (!thing.due_date || thing.notify_window == null) return false
