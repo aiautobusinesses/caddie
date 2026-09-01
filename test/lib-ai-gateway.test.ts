@@ -11,6 +11,12 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: MockAnthropic }
 })
 
+// Mock encryption so we can test the isEncrypted path without needing a real key
+vi.mock("@/lib/encryption", () => ({
+  isEncrypted: vi.fn((v: string) => v.startsWith("enc:v1:")),
+  decrypt: vi.fn((v: string) => v.replace("enc:v1:", "decrypted:")),
+}))
+
 function makeSupabase(
   result: { data: { anthropic_api_key: string | null } | null; error: { message: string } | null },
 ): SupabaseClient<Database> {
@@ -46,6 +52,13 @@ describe("resolveAiGateway", () => {
 
   it("returns a client when a valid key is present", async () => {
     const supabase = makeSupabase({ data: { anthropic_api_key: "sk-ant-test" }, error: null })
+    const result = await resolveAiGateway(supabase, "u1")
+    expect(result.error).toBeNull()
+    expect(result.client).not.toBeNull()
+  })
+
+  it("decrypts and uses key when stored in encrypted format", async () => {
+    const supabase = makeSupabase({ data: { anthropic_api_key: "enc:v1:abc123" }, error: null })
     const result = await resolveAiGateway(supabase, "u1")
     expect(result.error).toBeNull()
     expect(result.client).not.toBeNull()

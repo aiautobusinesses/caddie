@@ -84,6 +84,24 @@ describe("seedCarePlan", () => {
     expect(result).toMatchObject({ error: "AI request failed" })
   })
 
+  it("returns error when request times out (TimeoutError)", async () => {
+    const create = await getMockCreate()
+    const timeoutErr = new Error("The operation timed out.")
+    timeoutErr.name = "TimeoutError"
+    create.mockRejectedValue(timeoutErr)
+    const result = await seedCarePlan("something", await makeMockClient())
+    expect(result).toMatchObject({ error: "AI request timed out. Try again." })
+  })
+
+  it("returns error when request is aborted (AbortError)", async () => {
+    const create = await getMockCreate()
+    const abortErr = new Error("The operation was aborted.")
+    abortErr.name = "AbortError"
+    create.mockRejectedValue(abortErr)
+    const result = await seedCarePlan("something", await makeMockClient())
+    expect(result).toMatchObject({ error: "AI request timed out. Try again." })
+  })
+
   it("returns error on generic Error", async () => {
     const create = await getMockCreate()
     create.mockRejectedValue(new Error("network failure"))

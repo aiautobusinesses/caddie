@@ -88,10 +88,14 @@ create table things (
   name            text not null,
   class           thing_class not null default 'project',
 
+  -- coarse LLM-assigned category for spread variety logic (nullable, no enum — evolvable)
+  domain          text,
+
   -- obligations only
-  notify_window   int,               -- days before next_due to first notify
+  notify_window   int,               -- days before due_date to first notify
   notify_time_of_day notify_time_of_day,
   notify_escalate bool not null default false,
+  due_date        date,              -- the single date the obligation falls due (not recurrence)
 
   source          task_source not null default 'life_walk',
 
@@ -112,6 +116,7 @@ create index things_user_id on things (user_id);
 
 
 -- Steps
+-- No dates, no recurrence — those belong on care_plans and things respectively.
 create table steps (
   id                uuid primary key default gen_random_uuid(),
   thing_id          uuid not null references things on delete cascade,
@@ -123,14 +128,11 @@ create table steps (
   done              bool not null default false,
   done_at           timestamptz,
 
-  ends_cleanly      bool not null default true,
-  estimated_minutes int,
+  band              step_band not null default 'sitting',
+  mode              step_mode not null default 'doing',
+  shape             step_shape not null default 'clean',
 
   needs_know_how    bool not null default false,
-
-  recurrence_rule   jsonb,
-  next_due          date,
-  last_done_at      timestamptz,
 
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
@@ -141,8 +143,7 @@ create policy "Users can manage their own steps"
   on steps for all
   using (auth.uid() = user_id);
 
-create index steps_thing_id       on steps (thing_id);
-create index steps_user_next_due  on steps (user_id, next_due);
+create index steps_thing_id on steps (thing_id);
 
 
 -- Add live_step_id FK now that steps exists

@@ -6,6 +6,7 @@ import { useOfferCardState } from "./offer/useOfferCardState"
 import OfferScreen from "./offer/OfferScreen"
 import FocusScreen from "./offer/FocusScreen"
 import FamiliarityScreen from "./offer/FamiliarityScreen"
+import StopNoteScreen from "./offer/StopNoteScreen"
 import SettingsScreen from "./offer/SettingsScreen"
 import type { OfferCardProps } from "./offer/types"
 
@@ -29,6 +30,8 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     handleFamiliarityYes,
     handleFamiliarityNo,
     handleDone,
+    handleStopNote,
+    handleStopNoteSkip,
     handleSkipAll,
     handleSaveName,
     handleAbandon,
@@ -100,6 +103,13 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
             onDone={(stillGoing) => void handleDone(stillGoing)}
             onSaveName={(newName) => void handleSaveName(newName)}
             onAbandon={() => void handleAbandon()}
+          />
+        )}
+
+        {screen === "stop_note" && (
+          <StopNoteScreen
+            onSave={(note, photoFile) => void handleStopNote(note, photoFile)}
+            onSkip={() => void handleStopNoteSkip()}
           />
         )}
 

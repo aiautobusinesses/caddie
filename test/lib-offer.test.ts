@@ -1,31 +1,42 @@
 import { describe, expect, it } from "vitest"
-import { computeOffer } from "@/lib/offer"
-import type { OfferThingRow, OfferComputationInput } from "@/lib/offer"
+import {
+  computeOffer,
+  isEarlyPhase,
+  TENURE_THRESHOLD,
+  NUDGE_BACK_THRESHOLD,
+} from "@/lib/offer"
+import type { OfferThingRow, OfferComputationInput, OfferStepRow } from "@/lib/offer"
 import type { CarePlanRow } from "@/lib/care-grouping"
+
+// ---------------------------------------------------------------------------
+// Factories
+// ---------------------------------------------------------------------------
+
+function makeStep(overrides: Partial<OfferStepRow> = {}): OfferStepRow {
+  return {
+    id: "s1",
+    name: "Step 1",
+    band: "sitting",
+    mode: "doing",
+    shape: "clean",
+    needs_know_how: false,
+    step_order: 0,
+    done: false,
+    ...overrides,
+  }
+}
 
 function makeThing(overrides: Partial<OfferThingRow> = {}): OfferThingRow {
   return {
     id: "t1",
     name: "Thing 1",
     class: "project",
+    domain: "home",
+    due_date: null,
     notify_window: null,
     live_step_id: "s1",
     started_at: null,
-    steps: [
-      {
-        id: "s1",
-        name: "Step 1",
-        band: "sitting",
-        mode: "doing",
-        shape: "clean",
-        needs_know_how: false,
-        recurrence_rule: null,
-        next_due: null,
-        last_done_at: null,
-        step_order: 0,
-        done: false,
-      },
-    ],
+    steps: [makeStep()],
     ...overrides,
   }
 }
@@ -51,7 +62,13 @@ const baseInput: OfferComputationInput = {
   things: [],
   carePlans: [],
   lastCareOfferDate: null,
+  completionCount: TENURE_THRESHOLD, // default: not early phase
+  nudgeBackCounts: {},
 }
+
+// ---------------------------------------------------------------------------
+// Core offer logic
+// ---------------------------------------------------------------------------
 
 describe("computeOffer", () => {
   it("returns empty offer when nothing available", () => {
@@ -87,223 +104,157 @@ describe("computeOffer", () => {
   })
 
   it("excludes things with live_step_id null AND steps present (no live step)", () => {
-    // live_step_id null and steps.length > 0 → not available
-    const thing = makeThing({
-      live_step_id: null,
-      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
-    })
+    const thing = makeThing({ live_step_id: null, steps: [makeStep()] })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer).toHaveLength(0)
   })
 
   it("includes thing with live_step_id null and steps.length === 0 in offer (no-step thing)", () => {
-    // live_step_id null but steps.length === 0 → available (|| steps.length === 0)
     const thing = makeThing({ live_step_id: null, steps: [] })
     const result = computeOffer({ ...baseInput, things: [thing] })
-    // It is available and maps to a fallback step_name
     expect(result.offer).toHaveLength(1)
     expect(result.offer[0].step_name).toBe("Next thing on Thing 1")
   })
 
-  it("builds reason for obligation with next_due in future", () => {
+  it("step_name falls back when no live step found", () => {
+    const thing = makeThing({ live_step_id: "missing" })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0].step_name).toBe("Next thing on Thing 1")
+    expect(result.offer[0].band).toBe("sitting")
+  })
+
+  it("offer item exposes mode and domain", () => {
+    const thing = makeThing({ steps: [makeStep({ mode: "thinking" })] })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0].mode).toBe("thinking")
+    expect(result.offer[0].domain).toBe("home")
+  })
+
+  it("domain falls back to 'other' when thing.domain is null", () => {
+    const thing = makeThing({ domain: null })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0].domain).toBe("other")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Obligation reason logic — reads from thing.due_date, not step fields
+// ---------------------------------------------------------------------------
+
+describe("computeOffer — obligation reasons", () => {
+  it("builds reason for obligation with due_date in future", () => {
     const thing = makeThing({
       class: "obligation",
+      due_date: "2024-02-05",
       notify_window: 30,
-      steps: [{
-        id: "s1", name: "Book MOT", band: "short", mode: "thinking", shape: "clean",
-        needs_know_how: false, recurrence_rule: null, next_due: "2024-02-05", last_done_at: null, step_order: 0, done: false,
-      }],
+      steps: [makeStep({ id: "s1", name: "Book MOT", band: "short", mode: "thinking" })],
     })
     const result = computeOffer({ ...baseInput, today: "2024-02-01", things: [thing] })
     expect(result.offer[0].reason).toBe("due in 4 days")
   })
 
   it("builds reason: due today for obligation", () => {
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }] })
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-02-01",
+      notify_window: 10,
+      steps: [makeStep()],
+    })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due today")
   })
 
   it("builds reason: due tomorrow for obligation", () => {
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-02", last_done_at: null, step_order: 0, done: false }] })
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-02-02",
+      notify_window: 10,
+      steps: [makeStep()],
+    })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("due tomorrow")
   })
 
-  it("builds reason: overdue for obligation", () => {
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-01-31", last_done_at: null, step_order: 0, done: false }] })
+  it("builds reason: overdue (singular) for obligation", () => {
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-01-31",
+      notify_window: 10,
+      steps: [makeStep()],
+    })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("1 day overdue")
   })
 
-  it("builds reason: overdue plural for obligation (lib/offer.ts:81 — Math.abs(days)===1 false)", () => {
-    // Math.abs(days) !== 1 → "s" suffix. 3 days overdue.
-    const thing = makeThing({ class: "obligation", notify_window: 10, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-01-29", last_done_at: null, step_order: 0, done: false }] })
+  it("builds reason: overdue (plural) for obligation", () => {
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-01-29",
+      notify_window: 10,
+      steps: [makeStep()],
+    })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].reason).toBe("3 days overdue")
   })
 
-  it("skips recurrence reason when parseRecurrenceRule returns null (lib/offer.ts:89)", () => {
-    // recurrence_rule is set but invalid → parseRecurrenceRule → null → if(rule) false
-    const thing = makeThing({
-      steps: [{
-        id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        needs_know_how: false, recurrence_rule: { type: "invalid" }, // invalid → parseRecurrenceRule returns null
-        next_due: null, last_done_at: "2024-01-28", step_order: 0, done: false,
-      }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    // rule is null → reason is null (no next_due, not short band)
-    expect(result.offer[0].reason).toBeNull()
-  })
-
-  it("builds reason: last done N days ago for recurring step with last_done_at", () => {
-    const thing = makeThing({
-      steps: [{
-        id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
-        next_due: null, last_done_at: "2024-01-29", step_order: 0, done: false,
-      }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBe("last done 3 days ago")
-  })
-
-  it("builds reason: last done 1 day ago (singular)", () => {
-    const thing = makeThing({
-      steps: [{
-        id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
-        next_due: null, last_done_at: "2024-01-31", step_order: 0, done: false,
-      }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBe("last done 1 day ago")
-  })
-
-  it("builds reason: due now for next_due today (project with next_due)", () => {
-    const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBe("due now")
-  })
-
-  it("builds reason: due tomorrow for project", () => {
-    const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-02", last_done_at: null, step_order: 0, done: false }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBe("due tomorrow")
-  })
-
-  it("builds reason: due in N days for project", () => {
-    const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-05", last_done_at: null, step_order: 0, done: false }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBe("due in 4 days")
-  })
-
-  it("builds reason: quick one for short band, no due", () => {
-    const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBe("quick one")
-  })
-
-  it("returns null reason when no condition matches", () => {
-    const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
-    })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].reason).toBeNull()
-  })
-
-  it("recurrence_rule present but daysSince === 0 — skips that reason branch (lib/offer.ts:91)", () => {
-    // daysSince > 0 false branch: last_done_at is TODAY
-    const thing = makeThing({
-      steps: [{
-        id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean",
-        needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" },
-        next_due: null, last_done_at: "2024-02-01", step_order: 0, done: false,
-      }],
-    })
-    const result = computeOffer({ ...baseInput, today: "2024-02-01", things: [thing] })
-    // daysSince = 0 → skips the "last done N days ago" branch; no next_due or short band → null
-    expect(result.offer[0].reason).toBeNull()
-  })
-
-  it("project with next_due > 7 days away returns null reason (lib/offer.ts:101)", () => {
-    // days <= 7 false branch: next_due is 10 days away
-    const thing = makeThing({
-      steps: [{ id: "s1", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-11", last_done_at: null, step_order: 0, done: false }],
-    })
-    const result = computeOffer({ ...baseInput, today: "2024-02-01", things: [thing] })
-    // 10 days away: days > 7, not short band → null
-    expect(result.offer[0].reason).toBeNull()
-  })
-
-  it("getBand falls back to 'sitting' when live_step_id matches no step (lib/offer.ts:113)", () => {
-    // ?? "sitting" fallback: live_step_id points to a step not in the steps array
-    const thing = makeThing({
-      id: "t1",
-      live_step_id: "missing-id",
-      steps: [
-        { id: "s1", name: "S1", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false },
-        { id: "s2", name: "S2", band: "run", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 1, done: false },
-        { id: "s3", name: "S3", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 2, done: false },
-        { id: "s4", name: "S4", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 3, done: false },
-      ],
-    })
-    // More than 3 items so pickWithSpread runs, and getBand is called for this thing
-    const things = [thing, makeThing({ id: "t2", live_step_id: "s2x", steps: [{ id: "s2x", name: "S", band: "run", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }), makeThing({ id: "t3", live_step_id: "s3x", steps: [{ id: "s3x", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }), makeThing({ id: "t4", live_step_id: "s4x", steps: [{ id: "s4x", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] })]
-    const result = computeOffer({ ...baseInput, things })
-    expect(result.offer.length).toBeLessThanOrEqual(3)
-  })
-
-  it("mapCareGroup returns null when buildCareGroup returns null (lib/offer.ts:146)", () => {
-    // carePlans.length > 0 but no plan is due today → buildCareGroup returns null → mapCareGroup(null) → null
-    const futurePlan = makePlan({ next_due_at: "2024-12-31" }) // far future — not due
-    const result = computeOffer({ ...baseInput, today: "2024-02-01", carePlans: [futurePlan] })
-    expect(result.careGroup).toBeNull()
-  })
-
-  it("filters obligation by notify_window", () => {
-    // next_due is 20 days away, notify_window is 5 → should NOT appear
+  it("filters obligation by notify_window against thing.due_date", () => {
+    // due_date is 20 days away, notify_window is 5 → should NOT appear
     const thing = makeThing({
       class: "obligation",
+      due_date: "2024-02-21",
       notify_window: 5,
-      steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-21", last_done_at: null, step_order: 0, done: false }],
+      steps: [makeStep()],
     })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer).toHaveLength(0)
   })
 
-  it("fills remaining slots from overflow when only one band is present", () => {
-    // 4 projects all "sitting" → pickWithSpread picks sitting[0] from bucket,
-    // then the loop at lines 124-127 fills the remaining 2 slots from the overflow
-    const things = ["t1","t2","t3","t4"].map((id) => makeThing({
-      id, live_step_id: `s${id}`,
-      steps: [{ id: `s${id}`, name: "S", band: "sitting" as const, mode: "doing" as const,
-        shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
-    }))
-    const result = computeOffer({ ...baseInput, things })
-    expect(result.offer).toHaveLength(3)
+  it("includes obligation when due_date is null (no window to check)", () => {
+    const thing = makeThing({
+      class: "obligation",
+      due_date: null,
+      notify_window: 5,
+      steps: [makeStep()],
+    })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer).toHaveLength(1)
+    expect(result.offer[0].reason).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Project reason logic — no urgency language ever
+// ---------------------------------------------------------------------------
+
+describe("computeOffer — project reasons", () => {
+  it("returns null reason for project (never urgency)", () => {
+    const thing = makeThing({
+      steps: [makeStep({ band: "sitting" })],
+    })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0].reason).toBeNull()
   })
 
-  it("spreads across bands when more than 3 projects", () => {
-    const things = [
-      makeThing({ id: "t1", steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-      makeThing({ id: "t2", live_step_id: "s2", steps: [{ id: "s2", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-      makeThing({ id: "t3", live_step_id: "s3", steps: [{ id: "s3", name: "S", band: "run", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-      makeThing({ id: "t4", live_step_id: "s4", steps: [{ id: "s4", name: "S", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }] }),
-    ]
-    const result = computeOffer({ ...baseInput, things })
-    expect(result.offer.length).toBeLessThanOrEqual(3)
+  it("builds reason: quick one for short band project", () => {
+    const thing = makeThing({
+      steps: [makeStep({ band: "short" })],
+    })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0].reason).toBe("quick one")
   })
 
+  it("returns null reason when no condition matches (project, sitting band)", () => {
+    const thing = makeThing({ steps: [makeStep()] })
+    const result = computeOffer({ ...baseInput, things: [thing] })
+    expect(result.offer[0].reason).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// One clock-bearing slot — obligation suppresses care group
+// ---------------------------------------------------------------------------
+
+describe("computeOffer — one clock slot", () => {
   it("care group takes the reserved slot when no obligation", () => {
     const plan = makePlan()
     const project = makeThing({ id: "tp" })
@@ -313,17 +264,237 @@ describe("computeOffer", () => {
     expect(result.offer.length).toBeLessThanOrEqual(2)
   })
 
-  it("care group not shown when obligation present (obligation takes reserved slot)", () => {
+  it("obligation present suppresses care group — they share the one clock slot", () => {
     const plan = makePlan()
-    const obligation = makeThing({ id: "to", class: "obligation", notify_window: null, steps: [{ id: "s1", name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: "2024-02-01", last_done_at: null, step_order: 0, done: false }] })
+    const obligation = makeThing({
+      id: "to",
+      class: "obligation",
+      due_date: "2024-02-01",
+      notify_window: null,
+      steps: [makeStep()],
+    })
     const result = computeOffer({ ...baseInput, things: [obligation], carePlans: [plan] })
     expect(result.careGroup).toBeNull()
+    // Obligation occupies the one clock slot
+    expect(result.offer.some((item) => item.thing_id === "to")).toBe(true)
   })
 
-  it("step_name falls back when no live step found", () => {
-    const thing = makeThing({ live_step_id: "missing" })
-    const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer[0].step_name).toBe("Next thing on Thing 1")
-    expect(result.offer[0].band).toBe("sitting")
+  it("mapCareGroup returns null when buildCareGroup returns null", () => {
+    // far future plan — not yet due, buildCareGroup returns null
+    const futurePlan = makePlan({ next_due_at: "2024-12-31" })
+    const result = computeOffer({ ...baseInput, today: "2024-02-01", carePlans: [futurePlan] })
+    expect(result.careGroup).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Spread logic — band, mode, domain
+// ---------------------------------------------------------------------------
+
+describe("computeOffer — pickWithSpread", () => {
+  it("returns all items when pool size <= 3", () => {
+    const things = [
+      makeThing({ id: "t1" }),
+      makeThing({ id: "t2" }),
+    ]
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer).toHaveLength(2)
+  })
+
+  it("spreads across bands when more than 3 projects", () => {
+    const things = [
+      makeThing({ id: "t1", steps: [makeStep({ id: "s1", band: "short" })] }),
+      makeThing({ id: "t2", live_step_id: "s2", steps: [makeStep({ id: "s2", band: "sitting" })] }),
+      makeThing({ id: "t3", live_step_id: "s3", steps: [makeStep({ id: "s3", band: "run" })] }),
+      makeThing({ id: "t4", live_step_id: "s4", steps: [makeStep({ id: "s4", band: "sitting" })] }),
+    ]
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer.length).toBeLessThanOrEqual(3)
+    // Should pick one from each band first
+    const bands = result.offer.map((item) => item.band)
+    const uniqueBands = new Set(bands)
+    expect(uniqueBands.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it("fills remaining slots from overflow when only one band present", () => {
+    const things = ["t1", "t2", "t3", "t4"].map((id) => makeThing({
+      id, live_step_id: `s${id}`,
+      steps: [makeStep({ id: `s${id}`, band: "sitting" })],
+    }))
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer).toHaveLength(3)
+  })
+
+  it("avoids two items from the same domain when alternatives exist", () => {
+    // Two home things and one vehicle thing — spread should prefer variety
+    const things = [
+      makeThing({ id: "t1", domain: "home", live_step_id: "s1", steps: [makeStep({ id: "s1", band: "sitting", mode: "doing" })] }),
+      makeThing({ id: "t2", domain: "home", live_step_id: "s2", steps: [makeStep({ id: "s2", band: "sitting", mode: "doing" })] }),
+      makeThing({ id: "t3", domain: "vehicle", live_step_id: "s3", steps: [makeStep({ id: "s3", band: "sitting", mode: "doing" })] }),
+      makeThing({ id: "t4", domain: "finance", live_step_id: "s4", steps: [makeStep({ id: "s4", band: "sitting", mode: "doing" })] }),
+    ]
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer).toHaveLength(3)
+    const domains = result.offer.map((item) => item.domain)
+    // Should not have two home items if alternatives exist
+    const homeCount = domains.filter((d) => d === "home").length
+    expect(homeCount).toBeLessThanOrEqual(1)
+  })
+
+  it("avoids two items with the same mode when alternatives exist", () => {
+    const things = [
+      makeThing({ id: "t1", domain: "home", live_step_id: "s1", steps: [makeStep({ id: "s1", mode: "thinking", band: "sitting" })] }),
+      makeThing({ id: "t2", domain: "admin", live_step_id: "s2", steps: [makeStep({ id: "s2", mode: "thinking", band: "sitting" })] }),
+      makeThing({ id: "t3", domain: "vehicle", live_step_id: "s3", steps: [makeStep({ id: "s3", mode: "doing", band: "sitting" })] }),
+      makeThing({ id: "t4", domain: "garden", live_step_id: "s4", steps: [makeStep({ id: "s4", mode: "doing", band: "sitting" })] }),
+    ]
+    const result = computeOffer({ ...baseInput, things })
+    const modes = result.offer.map((item) => item.mode)
+    const thinkingCount = modes.filter((m) => m === "thinking").length
+    const doingCount = modes.filter((m) => m === "doing").length
+    // With spread, should prefer one of each mode
+    expect(thinkingCount).toBeLessThanOrEqual(2)
+    expect(doingCount).toBeLessThanOrEqual(2)
+  })
+
+  it("getBand falls back to 'sitting' when live_step_id matches no step", () => {
+    const thing = makeThing({
+      id: "t1",
+      live_step_id: "missing-id",
+      steps: [
+        makeStep({ id: "s1", band: "short" }),
+        makeStep({ id: "s2", band: "run", step_order: 1 }),
+        makeStep({ id: "s3", band: "short", step_order: 2 }),
+        makeStep({ id: "s4", band: "sitting", step_order: 3 }),
+      ],
+    })
+    const things = [
+      thing,
+      makeThing({ id: "t2", live_step_id: "s2x", steps: [makeStep({ id: "s2x", band: "run" })] }),
+      makeThing({ id: "t3", live_step_id: "s3x", steps: [makeStep({ id: "s3x", band: "sitting" })] }),
+      makeThing({ id: "t4", live_step_id: "s4x", steps: [makeStep({ id: "s4x", band: "short" })] }),
+    ]
+    const result = computeOffer({ ...baseInput, things })
+    expect(result.offer.length).toBeLessThanOrEqual(3)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tenure gate
+// ---------------------------------------------------------------------------
+
+describe("isEarlyPhase", () => {
+  it(`returns true below threshold (${TENURE_THRESHOLD})`, () => {
+    expect(isEarlyPhase(0)).toBe(true)
+    expect(isEarlyPhase(TENURE_THRESHOLD - 1)).toBe(true)
+  })
+
+  it(`returns false at or above threshold (${TENURE_THRESHOLD})`, () => {
+    expect(isEarlyPhase(TENURE_THRESHOLD)).toBe(false)
+    expect(isEarlyPhase(TENURE_THRESHOLD + 1)).toBe(false)
+  })
+})
+
+describe("computeOffer — tenure gate", () => {
+  it("degrades to generic reason lines in early phase (returns null reason)", () => {
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-02-05",
+      notify_window: 30,
+      steps: [makeStep({ band: "short" })],
+    })
+    const result = computeOffer({ ...baseInput, completionCount: 0, things: [thing] })
+    expect(result.offer[0].reason).toBeNull()
+  })
+
+  it("skips needs_know_how steps in early phase when alternatives exist", () => {
+    const knowHowThing = makeThing({
+      id: "t1",
+      steps: [makeStep({ needs_know_how: true })],
+    })
+    const normalThing = makeThing({
+      id: "t2",
+      live_step_id: "s2",
+      steps: [makeStep({ id: "s2", needs_know_how: false })],
+    })
+    const result = computeOffer({
+      ...baseInput,
+      completionCount: 0,
+      things: [knowHowThing, normalThing],
+    })
+    const ids = result.offer.map((item) => item.thing_id)
+    expect(ids).not.toContain("t1")
+    expect(ids).toContain("t2")
+  })
+
+  it("floor rule: falls back to unfiltered pool with generic names when filtering empties it", () => {
+    // All projects have needs_know_how — early phase would filter all out.
+    // Floor rule: use unfiltered pool but with generic step names.
+    const things = [
+      makeThing({ id: "t1", name: "Thing A", steps: [makeStep({ needs_know_how: true })] }),
+      makeThing({ id: "t2", name: "Thing B", live_step_id: "s2", steps: [makeStep({ id: "s2", needs_know_how: true })] }),
+    ]
+    const result = computeOffer({ ...baseInput, completionCount: 0, things })
+    // Not empty — floor rule kept the pool
+    expect(result.offer.length).toBeGreaterThan(0)
+    // Step names should be generic
+    for (const item of result.offer) {
+      expect(item.step_name).toMatch(/^Next thing on /)
+    }
+  })
+
+  it("needs_know_how is false on generic fallback items", () => {
+    const things = [
+      makeThing({ id: "t1", name: "Thing A", steps: [makeStep({ needs_know_how: true })] }),
+    ]
+    const result = computeOffer({ ...baseInput, completionCount: 0, things })
+    expect(result.offer[0].needs_know_how).toBe(false)
+  })
+
+  it("shows specific reasons when not in early phase", () => {
+    const thing = makeThing({
+      class: "obligation",
+      due_date: "2024-02-01",
+      notify_window: null,
+      steps: [makeStep()],
+    })
+    const result = computeOffer({ ...baseInput, completionCount: TENURE_THRESHOLD, things: [thing] })
+    expect(result.offer[0].reason).toBe("due today")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Per-thing degradation
+// ---------------------------------------------------------------------------
+
+describe("computeOffer — per-thing degradation", () => {
+  it(`uses generic step name when nudge-back count reaches threshold (${NUDGE_BACK_THRESHOLD})`, () => {
+    const thing = makeThing({ id: "t1", name: "Bath panel" })
+    const nudgeBackCounts = { t1: NUDGE_BACK_THRESHOLD }
+    const result = computeOffer({ ...baseInput, things: [thing], nudgeBackCounts })
+    expect(result.offer[0].step_name).toBe("Next thing on Bath panel")
+  })
+
+  it("uses specific step name when nudge-back count is below threshold", () => {
+    const thing = makeThing({ id: "t1", name: "Bath panel" })
+    const nudgeBackCounts = { t1: NUDGE_BACK_THRESHOLD - 1 }
+    const result = computeOffer({ ...baseInput, things: [thing], nudgeBackCounts })
+    expect(result.offer[0].step_name).toBe("Step 1")
+  })
+
+  it("disables needs_know_how on degraded items", () => {
+    const thing = makeThing({
+      id: "t1",
+      steps: [makeStep({ needs_know_how: true })],
+    })
+    const nudgeBackCounts = { t1: NUDGE_BACK_THRESHOLD }
+    const result = computeOffer({ ...baseInput, things: [thing], nudgeBackCounts })
+    expect(result.offer[0].needs_know_how).toBe(false)
+  })
+
+  it("uses specific names for things with no nudge-back events", () => {
+    const thing = makeThing({ id: "t1", name: "Garden bed" })
+    const result = computeOffer({ ...baseInput, things: [thing], nudgeBackCounts: {} })
+    expect(result.offer[0].step_name).toBe("Step 1")
   })
 })

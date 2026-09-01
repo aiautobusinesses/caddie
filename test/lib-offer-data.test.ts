@@ -5,10 +5,12 @@ function makeSupabase(overrides: {
   things?: { data: unknown; error: unknown }
   carePlans?: { data: unknown; error: null }
   profile?: { data: unknown; error: null }
+  stepEvents?: { data: unknown; error: null }
 } = {}) {
   const things = overrides.things ?? { data: [], error: null }
   const carePlans = overrides.carePlans ?? { data: [], error: null }
   const profile = overrides.profile ?? { data: null, error: null }
+  const stepEvents = overrides.stepEvents ?? { data: [], error: null }
 
   const buildChain = (result: unknown) => {
     const chain: Record<string, unknown> = {}
@@ -25,7 +27,8 @@ function makeSupabase(overrides: {
     callCount++
     if (callCount === 1) return buildChain(things)
     if (callCount === 2) return buildChain(carePlans)
-    return buildChain(profile)
+    if (callCount === 3) return buildChain(profile)
+    return buildChain(stepEvents)
   })
 
   return { from: fromImpl } as unknown as Parameters<typeof loadOfferData>[0]
@@ -53,8 +56,7 @@ describe("loadOfferData", () => {
     expect(result.inProgress).toBeNull()
   })
 
-  it("handles null things and null carePlans from DB (lib/offer-data.ts:57-58)", async () => {
-    // When DB returns null for things/carePlans, ?? [] fallback is used
+  it("handles null things and null carePlans from DB (fallback to [])", async () => {
     const supabase = makeSupabase({
       things: { data: null, error: null },
       carePlans: { data: null, error: null },
@@ -67,9 +69,9 @@ describe("loadOfferData", () => {
 
   it("passes things to computeOffer and returns result", async () => {
     const thing = {
-      id: "t1", name: "Test", class: "project", notify_window: null,
-      live_step_id: "s1", started_at: null,
-      steps: [{ id: "s1", name: "Step", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null, last_done_at: null, step_order: 0, done: false }],
+      id: "t1", name: "Test", class: "project", domain: "home", due_date: null,
+      notify_window: null, live_step_id: "s1", started_at: null,
+      steps: [{ id: "s1", name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false, step_order: 0, done: false }],
     }
     const supabase = makeSupabase({ things: { data: [thing], error: null } })
     const { result, error } = await loadOfferData(supabase, "u1")
@@ -91,5 +93,26 @@ describe("loadOfferData", () => {
     })
     const { result } = await loadOfferData(supabase, "u1")
     expect(result.careGroup).toBeNull()
+  })
+
+  it("derives completionCount from done step_events", async () => {
+    const thing = {
+      id: "t1", name: "Test", class: "project", domain: "home", due_date: null,
+      notify_window: null, live_step_id: "s1", started_at: null,
+      steps: [{ id: "s1", name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false, step_order: 0, done: false }],
+    }
+    const stepEvents = [
+      { event_type: "done", thing_id: "t1" },
+      { event_type: "done", thing_id: "t1" },
+      { event_type: "edited", thing_id: "t1" },
+    ]
+    const supabase = makeSupabase({
+      things: { data: [thing], error: null },
+      stepEvents: { data: stepEvents, error: null },
+    })
+    const { result } = await loadOfferData(supabase, "u1")
+    // completionCount = 2 (both "done" events) — still under tenure threshold
+    // result should have an offer (thing is offerable)
+    expect(result.offer).toHaveLength(1)
   })
 })

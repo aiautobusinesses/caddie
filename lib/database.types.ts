@@ -164,9 +164,11 @@ export type Database = {
           user_id: string
           name: string
           class: Database["public"]["Enums"]["thing_class"]
+          domain: string | null
           notify_window: number | null
           notify_time_of_day: Database["public"]["Enums"]["notify_time_of_day"] | null
           notify_escalate: boolean
+          due_date: string | null
           source: Database["public"]["Enums"]["task_source"]
           live_step_id: string | null
           started_at: string | null
@@ -178,9 +180,11 @@ export type Database = {
           user_id: string
           name: string
           class?: Database["public"]["Enums"]["thing_class"]
+          domain?: string | null
           notify_window?: number | null
           notify_time_of_day?: Database["public"]["Enums"]["notify_time_of_day"] | null
           notify_escalate?: boolean
+          due_date?: string | null
           source?: Database["public"]["Enums"]["task_source"]
           live_step_id?: string | null
           started_at?: string | null
@@ -192,9 +196,11 @@ export type Database = {
           user_id?: string
           name?: string
           class?: Database["public"]["Enums"]["thing_class"]
+          domain?: string | null
           notify_window?: number | null
           notify_time_of_day?: Database["public"]["Enums"]["notify_time_of_day"] | null
           notify_escalate?: boolean
+          due_date?: string | null
           source?: Database["public"]["Enums"]["task_source"]
           live_step_id?: string | null
           started_at?: string | null
@@ -216,9 +222,6 @@ export type Database = {
           mode: Database["public"]["Enums"]["step_mode"]
           shape: Database["public"]["Enums"]["step_shape"]
           needs_know_how: boolean
-          recurrence_rule: Json | null
-          next_due: string | null
-          last_done_at: string | null
           created_at: string
           updated_at: string
         }
@@ -234,9 +237,6 @@ export type Database = {
           mode?: Database["public"]["Enums"]["step_mode"]
           shape?: Database["public"]["Enums"]["step_shape"]
           needs_know_how?: boolean
-          recurrence_rule?: Json | null
-          next_due?: string | null
-          last_done_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -252,9 +252,6 @@ export type Database = {
           mode?: Database["public"]["Enums"]["step_mode"]
           shape?: Database["public"]["Enums"]["step_shape"]
           needs_know_how?: boolean
-          recurrence_rule?: Json | null
-          next_due?: string | null
-          last_done_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -417,7 +414,7 @@ export type Database = {
     Views: Record<string, never>
     Functions: {
       insert_thing_with_steps: {
-        Args: { p_user_id: string; p_name: string; p_class: string; p_notify_window: number | null; p_notify_time_of_day: string | null; p_notify_escalate: boolean; p_source: string; p_steps: Json }
+        Args: { p_user_id: string; p_name: string; p_class: string; p_domain: string | null; p_due_date: string | null; p_notify_window: number | null; p_notify_time_of_day: string | null; p_notify_escalate: boolean; p_source: string; p_steps: Json }
         Returns: string  // uuid
       }
       mark_thing_done: {
@@ -449,7 +446,7 @@ export type Database = {
       account_tier: "standard" | "advanced"
       thing_class: "obligation" | "project"
       task_source: "life_walk" | "manual" | "voice" | "photo"
-      event_type: "done" | "edited" | "notified"
+      event_type: "done" | "edited" | "notified" | "stopped"
       notify_time_of_day: "morning" | "afternoon" | "evening"
       step_band: "short" | "sitting" | "run"
       step_mode: "thinking" | "doing"

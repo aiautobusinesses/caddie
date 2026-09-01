@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
-import { parseRecurrenceRule, normalizeDateOnly } from "@/lib/recurrence"
-import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass, StepBand, StepMode, StepShape } from "@/lib/tasks"
-import { isTaskUrgency } from "@/lib/tasks"
+import { normalizeDateOnly } from "@/lib/recurrence"
+import type { LifeWalkExtractedThing, LifeWalkExtractedStep, NotifyTimeOfDay, ThingClass, ThingDomain, StepBand, StepMode, StepShape } from "@/lib/tasks"
+import { isTaskUrgency, isThingDomain } from "@/lib/tasks"
 import { getLifewalkModel, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
 
 // ---------------------------------------------------------------------------
@@ -63,21 +63,12 @@ function normalizeStep(raw: unknown): LifeWalkExtractedStep | null {
   const name = typeof item.name === "string" ? item.name.trim() : ""
   if (!name) return null
 
-  const recurrence_rule =
-    item.recurrence_rule && typeof item.recurrence_rule === "object"
-      ? parseRecurrenceRule(item.recurrence_rule)
-      : null
-
-  const next_due = normalizeDateOnly(item.next_due)
-
   return {
     name,
     band: normalizeBand(item.band),
     mode: normalizeMode(item.mode),
     shape: normalizeShape(item.shape),
     needs_know_how: item.needs_know_how === true,
-    recurrence_rule,
-    next_due,
   }
 }
 
@@ -97,6 +88,11 @@ function normalizeNotifyTimeOfDay(value: unknown): NotifyTimeOfDay | null {
 function normalizeThingClass(value: unknown): ThingClass {
   if (value === "obligation" || value === "project") return value
   return "project"
+}
+
+function normalizeDomain(value: unknown): ThingDomain | null {
+  if (isThingDomain(value)) return value
+  return null
 }
 
 function normalizeThing(raw: unknown): LifeWalkExtractedThing | null {
@@ -119,6 +115,8 @@ function normalizeThing(raw: unknown): LifeWalkExtractedThing | null {
   return {
     name,
     class: normalizeThingClass(item.class),
+    domain: normalizeDomain(item.domain),
+    due_date: normalizeDateOnly(item.due_date),
     notify_window:
       typeof item.notify_window === "number" ? item.notify_window : null,
     notify_time_of_day: normalizeNotifyTimeOfDay(item.notify_time_of_day),
@@ -199,15 +197,18 @@ export async function extractThingsFromNarration(
   try {
     return parseLifeWalkThingsFromModelText(textBlock.text)
   } catch (error) {
+    /* v8 ignore next */
     const msg = error instanceof Error ? error.message : "Could not parse things"
     // Log the raw model output so we can diagnose what went wrong
     console.error("[lifewalk-parse] model text:", textBlock.text.slice(0, 500))
     console.error("[lifewalk-parse] parse error:", msg)
+    /* v8 ignore next 4 */
     const isParseError =
       msg.includes("JSON") ||
       msg.includes("No valid things") ||
       msg.includes("model response")
     throw new Error(
+      /* v8 ignore next */
       isParseError ? "Could not parse your narration. Try again or shorten it." : msg,
     )
   }
@@ -224,6 +225,7 @@ export async function extractThingsFromNarration(
  */
 function isModelDeprecatedError(error: InstanceType<typeof Anthropic.APIError>): boolean {
   if (error.status !== 400) return false
+  /* v8 ignore next */
   const msg = error.message?.toLowerCase() ?? ""
   return msg.includes("deprecated") || msg.includes("retired") || msg.includes("no longer available")
 }

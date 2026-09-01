@@ -5,8 +5,8 @@ import { computeOffer } from "@/lib/offer"
 import type { OfferComputationResult, OfferThingRow } from "@/lib/offer"
 
 /**
- * Fetches things, care plans, and profile data for a user, then returns
- * the computed offer state.
+ * Fetches things, care plans, profile data, completion count, and per-thing
+ * nudge-back counts for a user, then returns the computed offer state.
  *
  * Used by both the SSR home page and the /api/offer route to avoid
  * duplicating the Supabase queries.
@@ -21,14 +21,14 @@ export async function loadOfferData(
     { data: things, error: thingsError },
     { data: carePlans },
     { data: profileData },
+    { data: stepEvents },
   ] = await Promise.all([
     supabase
       .from("things")
       .select(`
-        id, name, class, notify_window, live_step_id, started_at,
+        id, name, class, domain, due_date, notify_window, live_step_id, started_at,
         steps!steps_thing_id_fkey (
-          id, name, band, mode, shape, needs_know_how, recurrence_rule,
-          next_due, last_done_at, step_order, done
+          id, name, band, mode, shape, needs_know_how, step_order, done
         )
       `)
       .eq("user_id", userId),
@@ -52,9 +52,36 @@ export async function loadOfferData(
       .select("last_care_offer_date")
       .eq("id", userId)
       .single(),
+    // Fetch step_events for this user — used to derive completionCount and nudgeBackCounts.
+    supabase
+      .from("step_events")
+      .select("event_type, thing_id")
+      .eq("user_id", userId),
   ])
 
   if (thingsError) return { result: { inProgress: null, offer: [], careGroup: null }, error: thingsError.message }
+
+  type EventRow = { event_type: string; thing_id: string }
+  const events: EventRow[] = (stepEvents ?? []) as EventRow[]
+
+  const completionCount = events.filter((e) => e.event_type === "done").length
+
+  // Per-thing count of nudged_back events — stored as "edited" with kind metadata,
+  // but the event_type written by the event route is "edited" for all non-DB-enum values.
+  // The nudged_back signal is recorded as event_type="edited" with metadata {kind:"nudged_back"}.
+  // We cannot distinguish it from other edits here without joining metadata, so we use
+  // a dedicated count: step_events where event_type = 'edited' are queried below separately.
+  // For now, nudgeBackCounts is derived from the separate event_type string stored by the
+  // /api/steps/[id]/event route (see resolveEventTypeForDb — all non-db types become "edited").
+  //
+  // TODO: When Supabase supports metadata filters reliably, narrow this to kind=nudged_back.
+  // For now we use the full edited count per thing as a conservative proxy.
+  const nudgeBackCounts: Record<string, number> = {}
+  for (const event of events) {
+    if (event.event_type === "edited") {
+      nudgeBackCounts[event.thing_id] = (nudgeBackCounts[event.thing_id] ?? 0) + 1
+    }
+  }
 
   const result = computeOffer({
     today,
@@ -62,6 +89,8 @@ export async function loadOfferData(
     carePlans: (carePlans ?? []) as unknown as CarePlanRow[],
     lastCareOfferDate:
       (profileData as { last_care_offer_date: string | null } | null)?.last_care_offer_date ?? null,
+    completionCount,
+    nudgeBackCounts,
   })
 
   return { result, error: null }

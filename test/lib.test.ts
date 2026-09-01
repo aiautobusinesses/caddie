@@ -15,7 +15,7 @@ import {
   notifyTasksUpdated,
   saveCapturedThings,
 } from "@/lib/capture"
-import { getSupabasePublishableKey, getSupabaseUrl, hasSupabaseEnv } from "@/lib/env"
+import { getSupabasePublishableKey, getSupabaseUrl, getEncryptionKey, hasSupabaseEnv } from "@/lib/env"
 import { parseLifeWalkThingsFromModelText } from "@/lib/lifewalk-parse"
 import {
   parseRecurrenceRule,
@@ -237,7 +237,7 @@ describe("capture helpers", () => {
 
   it("saves captured things and surfaces server errors", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 201 }))
-    await expect(saveCapturedThings([{ name: "Thing", class: "project", notify_window: null, steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null }] }])).resolves.toBeUndefined()
+    await expect(saveCapturedThings([{ name: "Thing", class: "project", domain: null, due_date: null, notify_window: null, steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: false }] }])).resolves.toBeUndefined()
 
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "Bad save" }), { status: 500, headers: { "Content-Type": "application/json" } }),
@@ -320,20 +320,35 @@ describe("env helpers", () => {
     expect(() => getSupabaseUrl()).toThrow("Missing NEXT_PUBLIC_SUPABASE_URL")
     expect(() => getSupabasePublishableKey()).toThrow("Missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
   })
+
+  it("getEncryptionKey throws when ENCRYPTION_KEY is missing", () => {
+    delete process.env.ENCRYPTION_KEY
+    expect(() => getEncryptionKey()).toThrow("Missing ENCRYPTION_KEY")
+  })
+
+  it("getEncryptionKey throws when ENCRYPTION_KEY is not a 64-char hex string", () => {
+    process.env.ENCRYPTION_KEY = "tooshort"
+    expect(() => getEncryptionKey()).toThrow("64-character hex string")
+  })
 })
 
 describe("lifewalk parser", () => {
   it("parses plain arrays, fenced json, and wrapped object payloads", () => {
     const parsed = parseLifeWalkThingsFromModelText(
-      '```json\n[{"name":"Test","class":"project","notify_window":null,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Do it","band":"run","mode":"thinking","shape":"bleeds","recurrence_rule":{"type":"fixed","days":3,"anchor":"completion"},"next_due":"2024-02-01"}]}]\n```',
+      '```json\n[{"name":"Test","class":"project","domain":"home","due_date":null,"notify_window":null,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Do it","band":"run","mode":"thinking","shape":"bleeds","needs_know_how":false}]}]\n```',
     )
     expect(parsed[0].steps[0]).toMatchObject({ band: "run", mode: "thinking", shape: "bleeds" })
+    expect(parsed[0].domain).toBe("home")
+    expect(parsed[0].due_date).toBeNull()
 
     const wrapped = parseLifeWalkThingsFromModelText(
-      'prefix {"things":[{"name":" Another ","class":"other","notify_window":2,"steps":[{"name":" Step ","band":"bad","mode":"bad","shape":"bad","recurrence_rule":{"type":"bad"},"next_due":"bad"}]}]} suffix',
+      'prefix {"things":[{"name":" Another ","class":"other","notify_window":2,"steps":[{"name":" Step ","band":"bad","mode":"bad","shape":"bad"}]}]} suffix',
     )
     expect(wrapped[0]).toMatchObject({ name: "Another", class: "project", notify_window: 2 })
-    expect(wrapped[0].steps[0]).toMatchObject({ name: "Step", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null })
+    expect(wrapped[0].steps[0]).toMatchObject({ name: "Step", band: "sitting", mode: "doing", shape: "clean", needs_know_how: false })
+    // No recurrence_rule or next_due on steps
+    expect(wrapped[0].steps[0]).not.toHaveProperty("recurrence_rule")
+    expect(wrapped[0].steps[0]).not.toHaveProperty("next_due")
   })
 
   it("throws on invalid payloads", () => {
@@ -427,8 +442,10 @@ describe("recurrence helpers", () => {
 describe("task and service helpers", () => {
   it("validates task enums", () => {
     expect(isStepEventInput("why")).toBe(true)
+    expect(isStepEventInput("stopped")).toBe(true)
     expect(isStepEventInput("bad")).toBe(false)
     expect(resolveEventTypeForDb("why")).toBe("edited")
+    expect(resolveEventTypeForDb("stopped")).toBe("edited")
     expect(resolveEventTypeForDb("done")).toBe("done")
     expect(isTaskUrgency("now")).toBe(true)
     expect(isTaskUrgency("later")).toBe(false)

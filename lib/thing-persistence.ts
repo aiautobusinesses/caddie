@@ -1,4 +1,3 @@
-import { parseRecurrenceRule } from "@/lib/recurrence"
 import type { Database, Json } from "@/lib/database.types"
 import type { LifeWalkExtractedThing } from "@/lib/tasks"
 import type { SupabaseClient } from "@supabase/supabase-js"
@@ -31,16 +30,14 @@ export async function persistThings(
       mode: step.mode ?? "doing",
       shape: step.shape ?? "clean",
       needs_know_how: step.needs_know_how ?? false,
-      recurrence_rule: step.recurrence_rule
-        ? (parseRecurrenceRule(step.recurrence_rule) as Json)
-        : null,
-      next_due: step.next_due ?? null,
     }))
 
     const { data: thingId, error } = await supabase.rpc("insert_thing_with_steps", {
       p_user_id: options.userId,
       p_name: thing.name.trim(),
       p_class: thing.class ?? "project",
+      p_domain: thing.domain ?? null,
+      p_due_date: thing.due_date ?? null,
       p_notify_window: thing.notify_window ?? null,
       p_notify_time_of_day: thing.notify_time_of_day ?? null,
       p_notify_escalate: thing.notify_escalate ?? false,

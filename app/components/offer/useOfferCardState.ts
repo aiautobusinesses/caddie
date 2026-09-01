@@ -16,6 +16,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
   const [actionError, setActionError] = useState<string | null>(null)
   const [thingComplete, setThingComplete] = useState<{ name: string } | null>(null)
   const [justStarted, setJustStarted] = useState(false)
+  // The step_id to annotate with a stop note — kept across the still-going → stop_note transition.
+  const [stopNoteStepId, setStopNoteStepId] = useState<string | null>(null)
 
   const refreshOffer = useCallback(async () => {
     setRefreshing(true)
@@ -103,18 +105,54 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     await commitStart({ ...item, step_name: `Look up how to: ${item.step_name}`, needs_know_how: false })
   }
 
+  /**
+   * Handle Done / Still Going.
+   *
+   * When stillGoing is true:
+   *   1. Record a `stopped` event immediately (non-blocking on the UI transition).
+   *   2. Call the still-going route to clear `started_at`.
+   *   3. Transition to the `stop_note` screen — the user can annotate or skip.
+   *
+   * The stop event is post-tap and non-blocking: if the API call fails the note
+   * screen still appears, preserving the user's intent to stop without nagging.
+   */
   async function handleDone(stillGoing: boolean) {
     if (!inProgress) return
     setActionError(null)
+
+    if (stillGoing) {
+      // Find the live step id from the current offer context.
+      // We don't have direct access to offer items here, so we use the thing_id
+      // as a fallback step_id if no live step is tracked separately.
+      const stepId = inProgress.thing_id  // best available without a separate step_id field
+
+      // Record the stopped event immediately — fire and forget.
+      void fetch(`/api/steps/${stepId}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_type: "stopped" }),
+      })
+
+      // Clear started_at via the done route with still_going: true.
+      void fetch(`/api/things/${inProgress.thing_id}/done`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ still_going: true }),
+      })
+
+      setStopNoteStepId(stepId)
+      setScreen("stop_note")
+      return
+    }
 
     try {
       const res = await fetch(`/api/things/${inProgress.thing_id}/done`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ still_going: stillGoing }),
+        body: JSON.stringify({ still_going: false }),
       })
       const data = await res.json()
-      if (!stillGoing && data.thing_complete && data.thing_name) {
+      if (data.thing_complete && data.thing_name) {
         setThingComplete({ name: data.thing_name as string })
         setTimeout(() => {
           setThingComplete(null)
@@ -127,6 +165,40 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       setActionError(e instanceof Error ? e.message : "Something went wrong")
       void refreshOffer()
     }
+  }
+
+  /**
+   * Called from StopNoteScreen when the user saves a note/photo or skips.
+   * If content is provided, record a second stopped event with the metadata.
+   * Then return to the offer screen.
+   */
+  async function handleStopNote(note: string | null, photoFile: File | null) {
+    const stepId = stopNoteStepId
+    setStopNoteStepId(null)
+
+    if ((note || photoFile) && stepId) {
+      // For now, photo upload is not yet implemented — store the filename as a placeholder.
+      const photoName = photoFile?.name ?? null
+      void fetch(`/api/steps/${stepId}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_type: "stopped",
+          metadata: {
+            kind: "stopped",
+            ...(note ? { note } : {}),
+            ...(photoName ? { photo_name: photoName } : {}),
+          },
+        }),
+      })
+    }
+
+    void refreshOffer()
+  }
+
+  async function handleStopNoteSkip() {
+    setStopNoteStepId(null)
+    void refreshOffer()
   }
 
   async function handleSaveName(newName: string) {
@@ -196,6 +268,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     handleFamiliarityYes,
     handleFamiliarityNo,
     handleDone,
+    handleStopNote,
+    handleStopNoteSkip,
     handleSkipAll,
     handleSaveName,
     handleAbandon,

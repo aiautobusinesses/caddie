@@ -451,7 +451,7 @@ describe("POST /api/capture/voice", async () => {
   it("returns 201 on success", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null }] }]
+    const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
     vi.mocked(extractThingsFromNarration).mockResolvedValue(things)
     vi.mocked(persistThings).mockResolvedValue({ saved: [{ thing_id: "t1", name: "T" }] })
     const res = await POST(voiceReq({ text: "hi" }))
@@ -461,7 +461,7 @@ describe("POST /api/capture/voice", async () => {
   it("returns 500 when persistThings throws", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null }] }]
+    const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
     vi.mocked(extractThingsFromNarration).mockResolvedValue(things)
     vi.mocked(persistThings).mockRejectedValue(new Error("save fail"))
     const res = await POST(voiceReq({ text: "hi" }))
@@ -471,7 +471,7 @@ describe("POST /api/capture/voice", async () => {
   it("returns 500 with generic message when non-Error thrown in persist", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
-    const things = [{ name: "T", class: "project" as const, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false, recurrence_rule: null, next_due: null }] }]
+    const things = [{ name: "T", class: "project" as const, domain: null, due_date: null, notify_window: null, notify_time_of_day: null, notify_escalate: false, steps: [{ name: "S", band: "short" as const, mode: "doing" as const, shape: "clean" as const, needs_know_how: false }] }]
     vi.mocked(extractThingsFromNarration).mockResolvedValue(things)
     vi.mocked(persistThings).mockRejectedValue("raw")
     const res = await POST(voiceReq({ text: "hi" }))
@@ -991,5 +991,14 @@ describe("POST /api/integrations — branch coverage", async () => {
     }))
     const res = await POST(jsonReq("http://localhost", { provider: "home_assistant", label: "  " }))
     expect(res.status).toBe(201)
+  })
+
+  it("returns 400 when provider is not in the allowed list", async () => {
+    // ALLOWED_PROVIDERS.includes() → false → 400 Invalid provider
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAdvancedAuth())
+    const res = await POST(jsonReq("http://localhost", { provider: "unknown_provider" }))
+    expect(res.status).toBe(400)
+    const data = await res.json()
+    expect(data.error).toBe("Invalid provider")
   })
 })

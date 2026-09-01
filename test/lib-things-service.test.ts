@@ -105,6 +105,14 @@ describe("markThingDone", () => {
     const result = await markThingDone(supabase, "t1", "u1")
     expect(result).toMatchObject({ ok: true, thing_complete: true, thing_name: "Done Thing" })
   })
+
+  it("defaults thing_complete to false when rpc returns null data", async () => {
+    const supabase = {
+      rpc: vi.fn(async () => ({ data: null, error: null })),
+    } as unknown as Parameters<typeof markThingDone>[0]
+    const result = await markThingDone(supabase, "t1", "u1")
+    expect(result).toMatchObject({ ok: true, still_going: false, thing_complete: false, thing_name: null })
+  })
 })
 
 // ── recordStepEvent ───────────────────────────────────────────────────────────
@@ -126,7 +134,7 @@ describe("recordStepEvent", () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return { insert: vi.fn(async () => ({ error: null })) }
       }),
@@ -135,12 +143,28 @@ describe("recordStepEvent", () => {
     expect(result).toEqual({ ok: true })
   })
 
+  it("inserts stopped event and returns ok", async () => {
+    const insertFn = vi.fn(async () => ({ error: null }))
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table === "steps") {
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
+        }
+        return { insert: insertFn }
+      }),
+    } as unknown as Parameters<typeof recordStepEvent>[0]
+    const result = await recordStepEvent(supabase, "s1", "u1", { event_type: "stopped" })
+    expect(result).toEqual({ ok: true })
+    // stopped is stored as "edited" in DB
+    expect(insertFn).toHaveBeenCalledWith(expect.objectContaining({ event_type: "edited" }))
+  })
+
   it("inserts why event with enriched metadata", async () => {
     const insertFn = vi.fn(async () => ({ error: null }))
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return { insert: insertFn }
       }),
@@ -154,7 +178,7 @@ describe("recordStepEvent", () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return { insert: insertFn }
       }),
@@ -168,7 +192,7 @@ describe("recordStepEvent", () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return { insert: insertFn }
       }),
@@ -181,7 +205,7 @@ describe("recordStepEvent", () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return { insert: vi.fn(async () => ({ error: { message: "insert fail" } })) }
       }),
@@ -189,77 +213,12 @@ describe("recordStepEvent", () => {
     await expect(recordStepEvent(supabase, "s1", "u1", { event_type: "skipped" })).rejects.toThrow("insert fail")
   })
 
-  it("handles done event with recurrence rule — updates next_due", async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date("2024-06-01T00:00:00Z"))
-    let call = 0
-    const stepUpdateEq = vi.fn(async () => ({ error: null }))
-    const supabase = {
-      from: vi.fn((table: string) => {
-        call++
-        if (table === "steps" && call === 1) {
-          return chainOf({
-            data: { id: "s1", thing_id: "t1", recurrence_rule: { type: "fixed", days: 7, anchor: "completion" }, next_due: "2024-06-01", step_order: 0 },
-            error: null,
-          })
-        }
-        return {
-          insert: vi.fn(async () => ({ error: null })),
-          update: vi.fn(() => ({ eq: stepUpdateEq })),
-        }
-      }),
-    } as unknown as Parameters<typeof recordStepEvent>[0]
-    const result = await recordStepEvent(supabase, "s1", "u1", { event_type: "done" })
-    expect(result).toEqual({ ok: true })
-    expect(stepUpdateEq).toHaveBeenCalled()
-  })
-
-  it("throws on event insert error for recurring done", async () => {
-    let call = 0
-    const supabase = {
-      from: vi.fn((table: string) => {
-        call++
-        if (table === "steps" && call === 1) {
-          return chainOf({
-            data: { id: "s1", thing_id: "t1", recurrence_rule: { type: "fixed", days: 7, anchor: "completion" }, next_due: null, step_order: 0 },
-            error: null,
-          })
-        }
-        return {
-          insert: vi.fn(async () => ({ error: { message: "event fail" } })),
-          update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
-        }
-      }),
-    } as unknown as Parameters<typeof recordStepEvent>[0]
-    await expect(recordStepEvent(supabase, "s1", "u1", { event_type: "done" })).rejects.toThrow("event fail")
-  })
-
-  it("throws on step update error for recurring done", async () => {
-    let call = 0
-    const supabase = {
-      from: vi.fn((table: string) => {
-        call++
-        if (table === "steps" && call === 1) {
-          return chainOf({
-            data: { id: "s1", thing_id: "t1", recurrence_rule: { type: "fixed", days: 7, anchor: "completion" }, next_due: null, step_order: 0 },
-            error: null,
-          })
-        }
-        return {
-          insert: vi.fn(async () => ({ error: null })),
-          update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: { message: "step fail" } })) })),
-        }
-      }),
-    } as unknown as Parameters<typeof recordStepEvent>[0]
-    await expect(recordStepEvent(supabase, "s1", "u1", { event_type: "done" })).rejects.toThrow("step fail")
-  })
-
-  it("handles non-recurring done — delegates to rpc and returns ok", async () => {
+  it("handles done event — delegates to rpc and returns ok", async () => {
     const rpcFn = vi.fn(async () => ({ data: { ok: true }, error: null }))
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return {}
       }),
@@ -273,11 +232,11 @@ describe("recordStepEvent", () => {
     }))
   })
 
-  it("throws on non-recurring done rpc error", async () => {
+  it("throws on done rpc error", async () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return {}
       }),
@@ -291,7 +250,7 @@ describe("recordStepEvent", () => {
     const supabase = {
       from: vi.fn((table: string) => {
         if (table === "steps") {
-          return chainOf({ data: { id: "s1", thing_id: "t1", recurrence_rule: null, next_due: null, step_order: 0 }, error: null })
+          return chainOf({ data: { id: "s1", thing_id: "t1", step_order: 0 }, error: null })
         }
         return { insert: insertFn }
       }),

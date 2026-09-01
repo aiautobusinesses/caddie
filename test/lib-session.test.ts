@@ -62,5 +62,27 @@ describe("getAuthenticatedContext", () => {
 
     expect(result).not.toBeNull()
     expect(result?.profile).toBeNull()
+    // also call getProfile() to cover the data ?? null branch (line 33)
+    const loaded = await result!.getProfile()
+    expect(loaded).toBeNull()
+  })
+
+  it("getProfile() returns cached result on second call", async () => {
+    const fakeUser = { id: "u1", email: "test@example.com" }
+    const fakeProfile = { id: "u1", timezone: "UTC", onboarding_done: true, account_tier: "standard" as const }
+    const fakeClient = makeFakeClient(fakeUser, fakeProfile)
+
+    vi.mocked(createClient).mockResolvedValue(fakeClient as unknown as Awaited<ReturnType<typeof createClient>>)
+    const result = await getAuthenticatedContext()
+
+    expect(result).not.toBeNull()
+    const first = await result!.getProfile()
+    const second = await result!.getProfile()
+    // cachedProfile is set after first call — second call must not re-query
+    expect(first).toEqual(fakeProfile)
+    expect(second).toEqual(fakeProfile)
+    // single() should only have been called once (cache hit on second call)
+    const singleFn = (fakeClient.from as ReturnType<typeof vi.fn>).mock.results[0]?.value?.select?.mock?.results[0]?.value?.eq?.mock?.results[0]?.value?.single
+    if (singleFn) expect(singleFn).toHaveBeenCalledTimes(1)
   })
 })

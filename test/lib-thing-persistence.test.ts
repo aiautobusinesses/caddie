@@ -6,11 +6,13 @@ function makeThing(overrides: Partial<LifeWalkExtractedThing> = {}): LifeWalkExt
   return {
     name: "Bath panel",
     class: "project",
+    domain: "home",
+    due_date: null,
     notify_window: null,
     notify_time_of_day: null,
     notify_escalate: false,
     steps: [
-      { name: "Order panel", band: "short", mode: "thinking", shape: "clean", needs_know_how: false, recurrence_rule: null, next_due: null },
+      { name: "Order panel", band: "short", mode: "thinking", shape: "clean", needs_know_how: false },
     ],
     ...overrides,
   }
@@ -75,13 +77,15 @@ describe("persistThings", () => {
     ).rejects.toThrow("Failed to insert thing")
   })
 
-  it("handles step with recurrence_rule", async () => {
+  it("persists domain and due_date on the RPC call", async () => {
     const supabase = makeSupabase({ thingId: "t1" })
-    const thing = makeThing({
-      steps: [{ name: "Water", band: "short", mode: "doing", shape: "clean", needs_know_how: false, recurrence_rule: { type: "fixed", days: 7, anchor: "completion" }, next_due: "2024-03-01" }],
-    })
+    const thing = makeThing({ domain: "vehicle", due_date: "2026-03-15" })
     const result = await persistThings(supabase, [thing], { source: "life_walk", userId: "u1" })
     expect(result.saved).toHaveLength(1)
+    expect(supabase.rpc).toHaveBeenCalledWith("insert_thing_with_steps", expect.objectContaining({
+      p_domain: "vehicle",
+      p_due_date: "2026-03-15",
+    }))
   })
 
   it("uses fallback class 'project' when thing.class is undefined", async () => {
@@ -107,7 +111,7 @@ describe("persistThings", () => {
   it("uses fallback band/mode/shape when step fields are undefined", async () => {
     const supabase = makeSupabase({ thingId: "t1" })
     const thing = makeThing({
-      steps: [{ name: "Step", band: undefined as unknown as "short", mode: undefined as unknown as "doing", shape: undefined as unknown as "clean", needs_know_how: false, recurrence_rule: null, next_due: undefined as unknown as null }],
+      steps: [{ name: "Step", band: undefined as unknown as "short", mode: undefined as unknown as "doing", shape: undefined as unknown as "clean", needs_know_how: false }],
     })
     const result = await persistThings(supabase, [thing], { source: "life_walk", userId: "u1" })
     expect(result.saved).toHaveLength(1)
@@ -120,7 +124,7 @@ describe("persistThings", () => {
   it("uses false fallback when needs_know_how is undefined", async () => {
     const supabase = makeSupabase({ thingId: "t1" })
     const thing = makeThing({
-      steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: undefined as unknown as boolean, recurrence_rule: null, next_due: null }],
+      steps: [{ name: "Step", band: "short", mode: "doing", shape: "clean", needs_know_how: undefined as unknown as boolean }],
     })
     const result = await persistThings(supabase, [thing], { source: "life_walk", userId: "u1" })
     expect(result.saved).toHaveLength(1)

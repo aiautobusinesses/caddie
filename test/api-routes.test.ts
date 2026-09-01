@@ -221,7 +221,7 @@ describe("POST /api/things", async () => {
   it("returns 201 on success", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth() as ReturnType<typeof fakeAuth>)
     vi.mocked(persistThings).mockResolvedValue({ saved: [{ thing_id: "t1", name: "Thing" }] })
-    const thing = { name: "T", class: "project", notify_window: null, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null }] }
+    const thing = { name: "T", class: "project", domain: null, due_date: null, notify_window: null, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false }] }
     const res = await POST(jsonReq("http://localhost", { things: [thing] }))
     expect(res.status).toBe(201)
   })
@@ -236,7 +236,7 @@ describe("POST /api/things", async () => {
   it("returns 500 when persistThings throws", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth() as ReturnType<typeof fakeAuth>)
     vi.mocked(persistThings).mockRejectedValue(new Error("persist failed"))
-    const thing = { name: "T", class: "project", notify_window: null, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null }] }
+    const thing = { name: "T", class: "project", domain: null, due_date: null, notify_window: null, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false }] }
     const res = await POST(jsonReq("http://localhost", { things: [thing] }))
     expect(res.status).toBe(500)
     const data = await res.json()
@@ -246,7 +246,7 @@ describe("POST /api/things", async () => {
   it("returns 500 with generic message when non-Error thrown", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth() as ReturnType<typeof fakeAuth>)
     vi.mocked(persistThings).mockRejectedValue("raw")
-    const thing = { name: "T", class: "project", notify_window: null, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean", recurrence_rule: null, next_due: null }] }
+    const thing = { name: "T", class: "project", domain: null, due_date: null, notify_window: null, steps: [{ name: "S", band: "short", mode: "doing", shape: "clean", needs_know_how: false }] }
     const res = await POST(jsonReq("http://localhost", { things: [thing] }))
     expect(res.status).toBe(500)
   })
@@ -293,6 +293,13 @@ describe("/api/things/[id]", async () => {
       const res = await PATCH(jsonReq("http://localhost", { name: "New name" }, "PATCH"), ctx("t1"))
       expect(res.status).toBe(200)
     })
+
+    it("returns 404 when thing is not found (data is null)", async () => {
+      const sb = { from: vi.fn(() => chain({ data: null, error: null })) }
+      vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
+      const res = await PATCH(jsonReq("http://localhost", { name: "New name" }, "PATCH"), ctx("t1"))
+      expect(res.status).toBe(404)
+    })
   })
 
   describe("DELETE", () => {
@@ -314,6 +321,13 @@ describe("/api/things/[id]", async () => {
       vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
       const res = await DELETE(new NextRequest("http://localhost", { method: "DELETE" }), ctx("t1"))
       expect(res.status).toBe(200)
+    })
+
+    it("returns 404 when thing is not found (empty data array)", async () => {
+      const sb = { from: vi.fn(() => chain({ data: [], error: null })) }
+      vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
+      const res = await DELETE(new NextRequest("http://localhost", { method: "DELETE" }), ctx("t1"))
+      expect(res.status).toBe(404)
     })
   })
 })
@@ -344,6 +358,13 @@ describe("POST /api/things/[id]/start", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
     const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
     expect(res.status).toBe(200)
+  })
+
+  it("returns 404 when thing is not found (data is null)", async () => {
+    const sb = { from: vi.fn(() => chain({ data: null, error: null })) }
+    vi.mocked(getAuthenticatedContext).mockResolvedValue({ user: { id: "u1" }, supabase: sb } as unknown as ReturnType<typeof fakeAuth>)
+    const res = await POST(new Request("http://localhost", { method: "POST" }), ctx("t1"))
+    expect(res.status).toBe(404)
   })
 })
 

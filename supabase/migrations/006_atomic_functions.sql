@@ -5,33 +5,45 @@
 
 -- 1. Insert a thing and all its steps in one transaction, then set live_step_id.
 create or replace function public.insert_thing_with_steps(
-  p_user_id uuid,
-  p_name text,
-  p_class text,
-  p_notify_window int,
+  p_user_id         uuid,
+  p_name            text,
+  p_class           text,
+  p_domain          text,
+  p_due_date        text,   -- ISO date string or null; obligations only
+  p_notify_window   int,
   p_notify_time_of_day text,
   p_notify_escalate bool,
-  p_source text,
-  p_steps jsonb   -- array of step objects
+  p_source          text,
+  p_steps           jsonb   -- array of step objects
 ) returns uuid
 language plpgsql
 security invoker
 set search_path = public
 as $$
 declare
-  v_thing_id uuid;
-  v_step record;
-  v_step_id uuid;
+  v_thing_id      uuid;
+  v_step          record;
+  v_step_id       uuid;
   v_first_step_id uuid;
-  v_step_order int := 0;
+  v_step_order    int := 0;
 begin
-  insert into things (user_id, name, class, notify_window, notify_time_of_day, notify_escalate, source)
-  values (p_user_id, p_name, p_class::thing_class, p_notify_window, p_notify_time_of_day::notify_time_of_day, p_notify_escalate, p_source::task_source)
+  insert into things (user_id, name, class, domain, due_date, notify_window, notify_time_of_day, notify_escalate, source)
+  values (
+    p_user_id,
+    p_name,
+    p_class::thing_class,
+    p_domain,
+    case when p_due_date is not null and p_due_date != 'null' then p_due_date::date else null end,
+    p_notify_window,
+    p_notify_time_of_day::notify_time_of_day,
+    p_notify_escalate,
+    p_source::task_source
+  )
   returning id into v_thing_id;
 
   for v_step in select * from jsonb_array_elements(p_steps)
   loop
-    insert into steps (thing_id, user_id, name, step_order, band, mode, shape, needs_know_how, recurrence_rule, next_due, done)
+    insert into steps (thing_id, user_id, name, step_order, band, mode, shape, needs_know_how, done)
     values (
       v_thing_id,
       p_user_id,
@@ -41,8 +53,6 @@ begin
       coalesce(v_step.value->>'mode', 'doing')::step_mode,
       coalesce(v_step.value->>'shape', 'clean')::step_shape,
       coalesce((v_step.value->>'needs_know_how')::bool, false),
-      case when v_step.value->'recurrence_rule' is not null and v_step.value->>'recurrence_rule' != 'null' then v_step.value->'recurrence_rule' else null end,
-      case when v_step.value->>'next_due' is not null and v_step.value->>'next_due' != 'null' then (v_step.value->>'next_due')::date else null end,
       false
     )
     returning id into v_step_id;
@@ -81,7 +91,7 @@ begin
   end if;
 
   if v_thing.live_step_id is not null then
-    update steps set done = true, done_at = now(), last_done_at = now()
+    update steps set done = true, done_at = now()
     where id = v_thing.live_step_id;
 
     select id into v_next_step_id
@@ -109,11 +119,10 @@ begin
 end;
 $$;
 
--- 3. Record a step event for the non-recurring done path.
---    The recurring path only needs two parallel writes, so it stays in TypeScript.
+-- 3. Record a step event for the done path.
 create or replace function public.record_step_event_done(
-  p_step_id uuid,
-  p_user_id uuid,
+  p_step_id  uuid,
+  p_user_id  uuid,
   p_metadata jsonb
 ) returns jsonb
 language plpgsql
@@ -121,21 +130,20 @@ security invoker
 set search_path = public
 as $$
 declare
-  v_step record;
+  v_step         record;
   v_next_step_id uuid;
 begin
-  select id, thing_id, recurrence_rule, next_due, step_order into v_step
+  select id, thing_id, step_order into v_step
   from steps where id = p_step_id and user_id = p_user_id;
 
   if not found then
     raise exception 'Step not found';
   end if;
 
-  -- Only handles non-recurring path; caller checks recurrence_rule before calling this
   insert into step_events (step_id, thing_id, user_id, event_type, metadata)
   values (p_step_id, v_step.thing_id, p_user_id, 'done', p_metadata);
 
-  update steps set done = true, done_at = now(), last_done_at = now()
+  update steps set done = true, done_at = now()
   where id = p_step_id;
 
   select id into v_next_step_id
