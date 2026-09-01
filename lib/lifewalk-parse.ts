@@ -1,9 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk"
-import { normalizeDateOnly } from "@/lib/recurrence"
 import type { LifeWalkExtractedThing, LifeWalkExtractedStep, LifeWalkExtractedEntity, LifeWalkExtractionResult, NotifyTimeOfDay, ThingClass, ThingDomain, StepBand, StepMode, StepShape } from "@/lib/tasks"
 import { isTaskUrgency, isThingDomain } from "@/lib/tasks"
 import { parseIntervals } from "@/lib/care"
 import { getLifewalkModel, LIFEWALK_EXTRACTION_PROMPT } from "@/lib/lifewalk-prompt"
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function normalizeDateOnly(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return DATE_ONLY_RE.test(trimmed) ? trimmed : null
+}
 
 // ---------------------------------------------------------------------------
 // JSON extraction

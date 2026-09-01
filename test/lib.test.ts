@@ -17,13 +17,6 @@ import {
 } from "@/lib/capture"
 import { getSupabasePublishableKey, getSupabaseUrl, getEncryptionKey, hasSupabaseEnv } from "@/lib/env"
 import { parseLifeWalkResultFromModelText } from "@/lib/lifewalk-parse"
-import {
-  parseRecurrenceRule,
-  calculateNextDue,
-  calculateAnnualNextDueOnOrAfter,
-  normalizeDateOnly,
-  resolveInitialDueDates,
-} from "@/lib/recurrence"
 import { createClient as createServiceClient } from "@/lib/supabase/server-service"
 import { isTaskUrgency, isStepEventInput } from "@/lib/tasks"
 
@@ -401,38 +394,6 @@ describe("lifewalk parser", () => {
   })
 })
 
-describe("recurrence helpers", () => {
-  it("parses recurrence rules", () => {
-    expect(parseRecurrenceRule({ type: "fixed", days: 3, anchor: "completion" })).toEqual({ type: "fixed", days: 3, anchor: "completion" })
-    expect(parseRecurrenceRule({ type: "seasonal", summerDays: 3, winterDays: 9, anchor: "schedule" })).toEqual({ type: "seasonal", summerDays: 3, winterDays: 9, anchor: "schedule" })
-    expect(parseRecurrenceRule({ type: "annual", month: 2, day: 10, anchor: "schedule" })).toEqual({ type: "annual", month: 2, day: 10, anchor: "schedule" })
-    expect(parseRecurrenceRule({ type: "fixed", days: 0, anchor: "completion" })).toBeNull()
-    expect(parseRecurrenceRule({ type: "fixed", days: "bad", anchor: "completion" })).toBeNull() // typeof days !== "number"
-    expect(parseRecurrenceRule({ type: "fixed", days: 3, anchor: "bad" })).toBeNull() // anchor not completion/schedule
-    expect(parseRecurrenceRule({ type: "seasonal", summerDays: 0, winterDays: 1, anchor: "completion" })).toBeNull()
-    expect(parseRecurrenceRule({ type: "annual", month: 13, day: 1, anchor: "schedule" })).toBeNull()
-    expect(parseRecurrenceRule([])).toBeNull()
-  })
-
-  it("calculates next due dates", () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date("2024-06-01T00:00:00.000Z"))
-    expect(calculateNextDue({ type: "fixed", days: 2, anchor: "completion" }, "2024-02-01", null)).toBe("2024-02-03")
-    expect(calculateNextDue({ type: "fixed", days: 2, anchor: "schedule" }, "2024-02-01", "2024-02-10")).toBe("2024-02-12")
-    expect(calculateNextDue({ type: "seasonal", summerDays: 2, winterDays: 5, anchor: "completion" }, "2024-02-01", null)).toBe("2024-02-03")
-    expect(calculateNextDue({ type: "annual", month: 3, day: 1, anchor: "schedule" }, "2024-02-01", null)).toBe("2024-03-01")
-    expect(calculateNextDue({ type: "annual", month: 1, day: 1, anchor: "schedule" }, "2024-02-01", null)).toBe("2025-01-01")
-    expect(calculateAnnualNextDueOnOrAfter({ type: "annual", month: 3, day: 1, anchor: "schedule" }, "2024-02-15")).toBe("2024-03-01")
-    expect(calculateAnnualNextDueOnOrAfter({ type: "annual", month: 1, day: 1, anchor: "schedule" }, "2024-02-15")).toBe("2025-01-01")
-    expect(normalizeDateOnly(" 2024-02-01 ")).toBe("2024-02-01")
-    expect(normalizeDateOnly("bad")).toBeNull()
-    expect(resolveInitialDueDates({ next_due: "2024-02-02", due_date: null }, "2024-01-01")).toEqual({ next_due: "2024-02-02", due_date: "2024-02-02" })
-    expect(resolveInitialDueDates({ due_date: "2024-02-03" }, "2024-01-01")).toEqual({ next_due: "2024-02-03", due_date: "2024-02-03" })
-    expect(resolveInitialDueDates({ recurrence_rule: { type: "annual", month: 4, day: 1, anchor: "schedule" } }, "2024-01-01")).toEqual({ next_due: "2024-04-01", due_date: "2024-04-01" })
-    expect(resolveInitialDueDates({}, "2024-01-01")).toEqual({ next_due: null, due_date: null })
-  })
-})
-
 describe("task and service helpers", () => {
   it("validates task enums", () => {
     expect(isStepEventInput("why")).toBe(true)
@@ -450,35 +411,5 @@ describe("task and service helpers", () => {
     expect(client).toBeTruthy()
     delete process.env.SUPABASE_SERVICE_ROLE_KEY
     expect(() => createServiceClient()).toThrow("Missing SUPABASE_SERVICE_ROLE_KEY")
-  })
-})
-
-
-describe("recurrence: schedule anchor with null currentNextDue falls back to lastDoneAt", () => {
-  it("uses lastDoneAt as base when anchor=schedule and currentNextDue is null", () => {
-    // Hits lib/recurrence.ts line 56: return parseDateOnly(lastDoneAt)
-    expect(calculateNextDue({ type: "fixed", days: 5, anchor: "schedule" }, "2024-03-01", null)).toBe("2024-03-06")
-    expect(calculateNextDue({ type: "seasonal", summerDays: 7, winterDays: 14, anchor: "schedule" }, "2024-06-01T00:00:00Z", null)).toBeTruthy()
-  })
-})
-
-describe("recurrence: seasonal winter branch (lib/recurrence.ts:71,89)", () => {
-  it("uses winterDays when current month is in winter (recurrence.ts:71 false branch)", () => {
-    // Set time to January (winter) so getCurrentSeason returns "winter"
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date("2024-01-15T00:00:00.000Z"))
-    const result = calculateNextDue({ type: "seasonal", summerDays: 7, winterDays: 14, anchor: "completion" }, "2024-01-01", null)
-    // winterDays = 14, base = 2024-01-01 + 14 = 2024-01-15
-    expect(result).toBe("2024-01-15")
-    vi.useRealTimers()
-  })
-})
-
-describe("recurrence: parseRecurrenceRule — seasonal anchor branch (lib/recurrence.ts:115)", () => {
-  it("returns null when seasonal rule has anchor 'schedule' (covers anchor === 'schedule' branch in seasonal)", () => {
-    // The condition checks both "completion" and "schedule" — need to test "schedule" path too
-    expect(parseRecurrenceRule({ type: "seasonal", summerDays: 3, winterDays: 9, anchor: "schedule" })).toMatchObject({ anchor: "schedule" })
-    // And ensure both anchor values work to cover both branches of the OR
-    expect(parseRecurrenceRule({ type: "seasonal", summerDays: 3, winterDays: 9, anchor: "completion" })).toMatchObject({ anchor: "completion" })
   })
 })

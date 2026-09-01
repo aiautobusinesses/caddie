@@ -318,6 +318,37 @@ describe("computeOffer — one clock slot", () => {
     const result = computeOffer({ ...baseInput, today: "2024-02-01", carePlans: [futurePlan] })
     expect(result.careGroup).toBeNull()
   })
+
+  it("no-time-signal rule: swaps last short-band project for non-short when obligation occupies the clock slot", () => {
+    // Obligation (clock-bearing) + two short-band projects → all items would have reasons.
+    // The rule requires at least one no-reason item; the last short slot should be swapped
+    // for a sitting-band project from the pool.
+    const obligation = makeThing({
+      id: "ob",
+      class: "obligation",
+      due_date: "2024-02-03",
+      notify_window: 10,
+      steps: [makeStep({ id: "so", band: "short" })],
+    })
+    const shortProject = makeThing({ id: "sp", live_step_id: "ssp", steps: [makeStep({ id: "ssp", band: "short" })] })
+    const sittingProject = makeThing({ id: "si", live_step_id: "ssi", steps: [makeStep({ id: "ssi", band: "sitting" })] })
+    const result = computeOffer({ ...baseInput, things: [obligation, shortProject, sittingProject] })
+    // At least one item must have a null reason
+    const hasNoReason = result.offer.some((item) => item.reason === null)
+    expect(hasNoReason).toBe(true)
+  })
+
+  it("no-time-signal rule: does not swap when no clock-bearing item is in the spread", () => {
+    // No obligation, no care group → spread has no clock-bearing item → rule doesn't apply.
+    // A spread of all short-band projects is fine; they'll all get "quick one" but the
+    // rule only fires when something else is already carrying a clock signal.
+    const s1 = makeThing({ id: "t1", live_step_id: "s1", steps: [makeStep({ id: "s1", band: "short" })] })
+    const s2 = makeThing({ id: "t2", live_step_id: "s2", steps: [makeStep({ id: "s2", band: "short" })] })
+    const result = computeOffer({ ...baseInput, things: [s1, s2] })
+    // No swap needed — both items will have "quick one" reason but that's allowed
+    // when there's no clock-bearing item in the spread.
+    expect(result.offer.length).toBe(2)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -471,9 +502,10 @@ describe("computeOffer — tenure gate", () => {
     expect(ids).toContain("t2")
   })
 
-  it("floor rule: falls back to unfiltered pool with generic names when filtering empties it", () => {
+  it("true floor: all items have needs_know_how — show specific names and keep needs_know_how true", () => {
     // All projects have needs_know_how — early phase would filter all out.
-    // Floor rule: use unfiltered pool but with generic step names.
+    // True floor (no alternatives): show the specific step name so the familiarity question
+    // can fire. That's the only path to clearing needs_know_how for the user.
     const things = [
       makeThing({ id: "t1", name: "Thing A", steps: [makeStep({ needs_know_how: true })] }),
       makeThing({ id: "t2", name: "Thing B", live_step_id: "s2", steps: [makeStep({ id: "s2", needs_know_how: true })] }),
@@ -481,18 +513,34 @@ describe("computeOffer — tenure gate", () => {
     const result = computeOffer({ ...baseInput, completionCount: 0, things })
     // Not empty — floor rule kept the pool
     expect(result.offer.length).toBeGreaterThan(0)
-    // Step names should be generic
+    // Step names must be specific (not generic) so the familiarity question fires
     for (const item of result.offer) {
-      expect(item.step_name).toMatch(/^Next thing on /)
+      expect(item.step_name).not.toMatch(/^Next thing on /)
+      expect(item.needs_know_how).toBe(true)
     }
   })
 
-  it("needs_know_how is false on generic fallback items", () => {
+  it("overflow: needs_know_how item served alongside non-needs_know_how alternatives — gets generic name", () => {
+    // One safe item exists (filtered pool non-empty). A needs_know_how item is served as
+    // overflow (floor NOT triggered). It should get a generic name and suppressed flag.
     const things = [
-      makeThing({ id: "t1", name: "Thing A", steps: [makeStep({ needs_know_how: true })] }),
+      makeThing({ id: "t1", name: "Safe thing", steps: [makeStep({ needs_know_how: false })] }),
+      makeThing({ id: "t2", name: "Know-how thing", live_step_id: "s2", steps: [makeStep({ id: "s2", needs_know_how: true })] }),
+      makeThing({ id: "t3", name: "Know-how 2", live_step_id: "s3", steps: [makeStep({ id: "s3", needs_know_how: true })] }),
+      makeThing({ id: "t4", name: "Know-how 3", live_step_id: "s4", steps: [makeStep({ id: "s4", needs_know_how: true })] }),
     ]
     const result = computeOffer({ ...baseInput, completionCount: 0, things })
-    expect(result.offer[0].needs_know_how).toBe(false)
+    // Safe thing should be in the offer
+    const safeItem = result.offer.find((item) => item.thing_id === "t1")
+    expect(safeItem).toBeDefined()
+    expect(safeItem?.step_name).not.toMatch(/^Next thing on /)
+    // Any overflow needs_know_how items should have generic names
+    for (const item of result.offer) {
+      if (item.thing_id !== "t1") {
+        expect(item.step_name).toMatch(/^Next thing on /)
+        expect(item.needs_know_how).toBe(false)
+      }
+    }
   })
 
   it("shows specific reasons when not in early phase", () => {

@@ -13,6 +13,20 @@ export async function GET() {
   const { result: offerState, error } = await loadOfferData(auth.supabase, auth.user.id)
   if (error) return NextResponse.json({ error }, { status: 500 })
 
+  // Record an `offered` event for each step in the spread.
+  // Fire-and-forget: a write failure must never block or break the offer response.
+  // These events are the signal source for v2 "never-accepted park" and offer frequency tracking.
+  if (offerState.offer.length > 0) {
+    const rows = offerState.offer.map((item) => ({
+      step_id: item.step_id,
+      thing_id: item.thing_id,
+      user_id: auth.user.id,
+      event_type: "offered" as const,
+      metadata: null,
+    }))
+    void Promise.resolve(auth.supabase.from("step_events").insert(rows)).catch(() => {/* swallow */})
+  }
+
   return NextResponse.json({
     in_progress: offerState.inProgress,
     offer: offerState.offer,

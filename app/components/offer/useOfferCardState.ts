@@ -180,7 +180,11 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     setStopNoteStepId(null)
 
     if ((note || photoFile) && stepId) {
-      // For now, photo upload is not yet implemented — store the filename as a placeholder.
+      // TODO: photo upload not yet implemented. The design relies on the photo as an
+      // environmental position marker (strongest resumption cue). Implement by uploading
+      // photoFile to Supabase Storage and storing the resulting URL in metadata, not the
+      // filename. Until then, the filename is stored as a placeholder so the event is
+      // recorded but the cue cannot be re-displayed.
       const photoName = photoFile?.name ?? null
       void fetch(`/api/steps/${stepId}/event`, {
         method: "POST",

@@ -278,15 +278,45 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
       })
     : allProjects
 
+  // True floor: filtering emptied the pool — fall back to unfiltered.
+  // When there were filtered alternatives available (filteredProjects.length > 0) the
+  // needs_know_how items are offered as overflow and get generic names/suppressed flag.
+  // When there were no alternatives at all (true floor), the user must be able to answer
+  // the familiarity question — it's the only route to clearing needs_know_how.
+  const usedFloor = earlyPhase && filteredProjects.length === 0
   const projects = filteredProjects.length > 0 ? filteredProjects : allProjects
 
   // One clock-bearing slot, maximum: obligation wins over care group.
   const hasObligation = obligations.length > 0
   const useCareSlot = !hasObligation && rawCareGroup != null
   const reservedSlots = hasObligation || useCareSlot ? 1 : 0
+  let pickedProjects = pickWithSpread(projects).slice(0, 3 - reservedSlots)
+
+  // Design rule: at least one item per spread carries no time signal (null reason).
+  // A project step gets a reason only when band === "short" ("quick one").
+  // Obligations always carry a due-date reason. If every project slot would produce
+  // "quick one" (all short-band), swap the last short-band slot for a non-short-band
+  // project from the pool — that item will have reason null, satisfying the rule.
+  // Only applies when there's at least one clock-bearing item in the spread;
+  // if there is no obligation or care group, the spread already has a no-reason item
+  // whenever any project has band !== "short".
+  const allPickedShort = pickedProjects.length > 0 && pickedProjects.every((t) => {
+    const ls = t.steps.find((s) => s.id === t.live_step_id)
+    return (ls?.band ?? "sitting") === "short"
+  })
+  if (allPickedShort && reservedSlots > 0) {
+    const nonShort = projects.find(
+      (t) => !pickedProjects.includes(t) && (t.steps.find((s) => s.id === t.live_step_id)?.band ?? "sitting") !== "short"
+    )
+    if (nonShort) {
+      // Replace the last picked project slot with the non-short-band item.
+      pickedProjects = [...pickedProjects.slice(0, pickedProjects.length - 1), nonShort]
+    }
+  }
+
   const selected = [
     ...obligations.slice(0, 1),
-    ...pickWithSpread(projects).slice(0, 3 - reservedSlots),
+    ...pickedProjects,
   ]
 
   const offer = selected.map((thing) => {
@@ -296,8 +326,12 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
     const nudgeCount = nudgeBackCounts[thing.id] ?? 0
     const useGenericName = nudgeCount >= NUDGE_BACK_THRESHOLD
 
-    // Early-phase floor: if the project pool fell back to unfiltered, use generic names.
-    const isUnconfirmedKnowHow = earlyPhase && (liveStep?.needs_know_how ?? false)
+    // Early-phase overflow: item has needs_know_how but was served because alternatives
+    // existed and were exhausted. Show a generic name and suppress the accept-question —
+    // the step may be wrong or too advanced for the early phase.
+    // Exception: if this is the true floor (no alternatives at all), show the specific
+    // step name and let the familiarity question fire — it's the only path to clearing it.
+    const isUnconfirmedKnowHow = earlyPhase && !usedFloor && (liveStep?.needs_know_how ?? false)
 
     const stepName = (useGenericName || isUnconfirmedKnowHow)
       ? `Next thing on ${thing.name}`

@@ -37,14 +37,8 @@ export default function FocusScreen({
   return (
     <>
       <div className="flex-none px-6 pt-6 pb-0">
-        <p className="text-xs font-bold uppercase tracking-[0.1em] text-muted">
-          {inProgress.thing_name ?? ""}
-        </p>
-      </div>
-
-      <div className="flex-1 px-6 py-5 flex flex-col justify-center min-h-0 overflow-hidden">
         {editingName ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
             <input
               type="text"
               value={editedName}
@@ -54,22 +48,26 @@ export default function FocusScreen({
                 if (e.key === "Escape") setEditingName(false)
               }}
               autoFocus
-              className="text-5xl font-bold leading-[1.04] tracking-[-0.025em] text-fg bg-transparent border-b-2 border-muted focus:outline-none focus:border-fg transition-colors w-full"
+              className="text-xs font-bold uppercase tracking-[0.1em] text-fg bg-transparent border-b border-muted focus:outline-none focus:border-fg transition-colors w-full"
             />
-            <div className="flex gap-3 mt-1">
-              <button type="button" onClick={commitName} className="text-sm font-bold text-fg hover:text-white transition-colors">Save</button>
-              <button type="button" onClick={() => setEditingName(false)} className="text-sm font-bold text-muted hover:text-subtle transition-colors">Cancel</button>
-            </div>
+            <button type="button" onClick={commitName} className="text-xs font-bold text-fg hover:text-white transition-colors flex-none">Save</button>
+            <button type="button" onClick={() => setEditingName(false)} className="text-xs font-bold text-muted hover:text-subtle transition-colors flex-none">✕</button>
           </div>
         ) : (
           <button
             type="button"
             onClick={startEditing}
-            className="text-left text-5xl font-bold leading-[1.02] tracking-[-0.03em] text-fg text-pretty hover:text-white transition-colors"
+            className="text-xs font-bold uppercase tracking-[0.1em] text-muted hover:text-subtle transition-colors text-left"
           >
-            {inProgress.step_name ?? inProgress.thing_name ?? ""}
+            {inProgress.thing_name ?? ""}
           </button>
         )}
+      </div>
+
+      <div className="flex-1 px-6 py-5 flex flex-col justify-center min-h-0 overflow-hidden">
+        <p className="text-5xl font-bold leading-[1.02] tracking-[-0.03em] text-fg text-pretty">
+          {inProgress.step_name ?? inProgress.thing_name ?? ""}
+        </p>
         <p className="mt-3.5 text-sm text-muted">
           {justStarted ? "started just now" : "welcome back"}
         </p>
