@@ -15,10 +15,16 @@ vi.mock("@anthropic-ai/sdk", () => {
   MockAnthropic.APIError = APIError
   return { default: MockAnthropic }
 })
-vi.mock("@/lib/lifewalk-parse", () => ({
-  parseLifeWalkResultFromModelText: vi.fn(),
-  extractFromNarration: vi.fn(),
-}))
+vi.mock("@/lib/lifewalk-parse", () => {
+  class EmptyExtractionError extends Error {
+    constructor() { super("Nothing concrete found in narration"); this.name = "EmptyExtractionError" }
+  }
+  return {
+    parseLifeWalkResultFromModelText: vi.fn(),
+    extractFromNarration: vi.fn(),
+    EmptyExtractionError,
+  }
+})
 vi.mock("@/lib/seed-care-plan", () => ({ seedCarePlan: vi.fn() }))
 vi.mock("@/lib/supabase/server-service", () => ({ createClient: vi.fn(() => ({})) }))
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }))
@@ -27,7 +33,7 @@ vi.mock("@/lib/invites", () => ({ acceptInvite: vi.fn() }))
 vi.mock("@/lib/ai-gateway", () => ({ resolveAiGateway: vi.fn() }))
 
 import { getAuthenticatedContext } from "@/lib/api/session"
-import { parseLifeWalkResultFromModelText, extractFromNarration } from "@/lib/lifewalk-parse"
+import { parseLifeWalkResultFromModelText, extractFromNarration, EmptyExtractionError } from "@/lib/lifewalk-parse"
 import { seedCarePlan } from "@/lib/seed-care-plan"
 import { createClient as createServiceClient } from "@/lib/supabase/server-service"
 import { createClient as createServerClient } from "@/lib/supabase/server"
@@ -318,6 +324,19 @@ describe("POST /api/lifewalk", async () => {
     expect(res.status).toBe(502)
   })
 
+  it("returns 200 with empty arrays and hint when extraction finds nothing (EmptyExtractionError)", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    vi.mocked(extractFromNarration).mockRejectedValue(new EmptyExtractionError())
+    const res = await POST(jsonReq("http://localhost", { transcript: "the garage" }))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.things).toEqual([])
+    expect(data.entities).toEqual([])
+    expect(typeof data.hint).toBe("string")
+    expect(data.hint.length).toBeGreaterThan(0)
+  })
+
   it("returns 500 with parse error message when extraction throws JSON parse error", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
@@ -521,12 +540,28 @@ describe("POST /api/capture/voice", async () => {
     expect(res.status).toBe(502)
   })
 
-  it("returns 422 when no things or entities extracted", async () => {
+  it("returns 200 with hint when no things or entities extracted", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
     vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
     vi.mocked(extractFromNarration).mockResolvedValue({ things: [], entities: [], entities_dropped: 0 })
     const res = await POST(voiceReq({ text: "hi" }))
-    expect(res.status).toBe(422)
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.saved).toEqual([])
+    expect(typeof data.hint).toBe("string")
+    expect(data.hint.length).toBeGreaterThan(0)
+  })
+
+  it("returns 200 with hint when EmptyExtractionError is thrown", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(makeServiceClient() as unknown as ReturnType<typeof createServiceClient>)
+    vi.mocked(resolveAiGateway).mockResolvedValue(await fakeGateway())
+    vi.mocked(extractFromNarration).mockRejectedValue(new EmptyExtractionError())
+    const res = await POST(voiceReq({ text: "the garage" }))
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.saved).toEqual([])
+    expect(typeof data.hint).toBe("string")
+    expect(data.hint.length).toBeGreaterThan(0)
   })
 
   it("returns 201 on success without entities_dropped when no entities", async () => {
@@ -794,7 +829,7 @@ describe("POST /api/lifewalk — branch coverage", async () => {
     })
     const res = await POST(jsonReq("http://localhost", { transcript: "broken plant" }))
     // No things, all entities dropped → still 200 but entities_dropped = 1
-    // (The route only 422s when things AND entities are both empty at extraction time;
+    // (The route only returns hint when things AND entities are both empty at extraction time;
     //  here entities was non-empty at that check, the drop happens inside saveEntities.)
     expect(res.status).toBe(200)
     const data = await res.json()

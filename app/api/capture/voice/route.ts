@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server-service"
 import { resolveAiGateway } from "@/lib/ai-gateway"
-import { extractFromNarration } from "@/lib/lifewalk-parse"
+import { extractFromNarration, EmptyExtractionError } from "@/lib/lifewalk-parse"
 import { persistThings } from "@/lib/thing-persistence"
 import { parseIntervals, computeInitialNextDueAt } from "@/lib/care"
 import type { Database, Json } from "@/lib/database.types"
@@ -66,12 +66,21 @@ export async function POST(request: NextRequest) {
   try {
     ;({ things, entities, entities_dropped: entitiesDropped } = await extractFromNarration(gateway.client, text))
   } catch (err) {
+    if (err instanceof EmptyExtractionError) {
+      return NextResponse.json({
+        saved: [],
+        hint: "Nothing specific found in that narration — try describing what you can see or what needs doing.",
+      })
+    }
     const msg = err instanceof Error ? err.message : "AI request failed"
     return NextResponse.json({ error: msg }, { status: 502 })
   }
 
   if (things.length === 0 && entities.length === 0) {
-    return NextResponse.json({ error: "No things extracted from text" }, { status: 422 })
+    return NextResponse.json({
+      saved: [],
+      hint: "Nothing specific found in that narration — try describing what you can see or what needs doing.",
+    })
   }
 
   // ── Persist via service role (integration context — no session cookie) ────

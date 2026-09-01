@@ -390,11 +390,15 @@ After the change:
 
 Life Walk extraction must output a nested structure (thing + ordered steps) rather than a flat task list. Both approaches were tested against four synthetic narrations via `scripts/test-extraction.mjs` (results in `scripts/test-extraction-results.json`).
 
-**Cases:** multi-step project (cracked bath panel); single-step obligation (MOT due 14 March); recurring maintenance (peace lily, seasonal watering); ambiguous ("the garage is a complete state").
+**Cases:** multi-step project (cracked bath panel); single-step obligation (MOT due 14 March); recurring maintenance (peace lily, seasonal watering); ambiguous ("the garage is a complete state, stuff everywhere, can't get the car in"); vague ("the garage is a complete state. Never quite know where to start.").
 
-**Results.** Multi-step: one-pass produced 6 steps in correct order including a waiting step correctly flagged `bleeds`; two-pass produced 5, collapsing measure-and-order and mis-flagging the mould treatment as `clean`. Obligation: one-pass set the due date correctly; two-pass produced a malformed recurrence rule with null fields and lost the date. Recurring: the original result is stale — both passes produced a recurrence rule on the step, which has since been removed from the schema. The extraction pipeline now produces entity + care plan for recurring items (migration 009, prompt updated accordingly). The peace-lily test case has not been re-run against the new output shape; that remains outstanding. Ambiguous: one-pass produced 3 restrained steps; two-pass produced 6, inventing a spurious monthly maintenance obligation not present in the narration.
+**Results.** Multi-step: one-pass produced 4 steps in correct order. Obligation: one-pass set the due date correctly and produced exactly one step. Recurring: one-pass correctly extracted an entity (not a thing) with a valid care schedule using the compact `{"base_days": 14, "spring_days": 10, "summer_days": 7, "autumn_days": 10}` shape, which expands to a full 12-key `MonthlyIntervals` map in `normalizeEntity` before saving — 3/3 runs. Ambiguous: one-pass produced 4–5 restrained steps without inventing spurious obligations. Vague: both arrays empty on all runs; model appended an explanation outside the JSON object (a prompt-violation warn is now logged when this occurs), which the parser strips safely.
 
-**Decision: one-pass.** Matched or beat two-pass on all four. Both observed failure modes were two-pass — a malformed rule, and spurious step invention. One-pass is also simpler, faster and cheaper.
+Previous note on the recurring case (stale since migration 009) is now resolved: the entity + care plan shape is current and verified.
+
+**Decision: one-pass.** Matched or beat two-pass on all cases. Both observed failure modes were two-pass — a malformed rule, and spurious step invention. One-pass is also simpler, faster and cheaper.
+
+**Reliability runner:** `scripts/test-extraction-repeat.mjs` — five cases, N runs each (default 3, override with `RUNS=n`). Requires `ANTHROPIC_API_KEY`. Pass rate is reported per case; the vague case asserts empty arrays rather than extraction.
 
 ---
 

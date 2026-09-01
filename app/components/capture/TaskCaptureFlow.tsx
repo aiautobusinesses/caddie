@@ -40,6 +40,8 @@ export default function TaskCaptureFlow({
   const [things, setThings] = useState<LifeWalkExtractedThing[]>([])
   const [entitiesDropped, setEntitiesDropped] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // Separate from error — a hint is not a failure, and shouldn't look like one.
+  const [hint, setHint] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [listening, setListening] = useState(false)
   // Lazy initialiser — runs once on mount (client only, never on server)
@@ -113,6 +115,7 @@ export default function TaskCaptureFlow({
     if (!transcript.trim()) return
     setStage("processing")
     setError(null)
+    setHint(null)
 
     try {
       const res = await fetch("/api/lifewalk", {
@@ -122,6 +125,13 @@ export default function TaskCaptureFlow({
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      // Empty extraction: model found nothing concrete. Show a hint at the
+      // narrate stage so the user can refine — not an error, so not in red.
+      if (data.hint && (!data.things || data.things.length === 0)) {
+        setHint(data.hint)
+        setStage("narrate")
+        return
+      }
       setThings(data.things ?? [])
       setEntitiesDropped(typeof data.entities_dropped === "number" ? data.entities_dropped : 0)
       setStage("review")
@@ -230,6 +240,7 @@ export default function TaskCaptureFlow({
           {listening && (
             <p className="text-xs text-red-400 mt-2 text-center">Listening — tap the mic to stop</p>
           )}
+          {hint && <p className="text-sm text-muted mt-3 text-center">{hint}</p>}
           {error && <p className="text-sm text-red-400 mt-3 text-center">{error}</p>}
           <button
             type="button"

@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthenticatedContext } from "@/lib/api/session"
 import { resolveAiGateway } from "@/lib/ai-gateway"
-import { extractFromNarration } from "@/lib/lifewalk-parse"
+import { extractFromNarration, EmptyExtractionError } from "@/lib/lifewalk-parse"
 import { parseIntervals, computeInitialNextDueAt } from "@/lib/care"
 import type { Json } from "@/lib/database.types"
 import type { LifeWalkExtractedEntity } from "@/lib/tasks"
@@ -104,6 +104,13 @@ export async function POST(req: NextRequest) {
       ...(totalDropped > 0 ? { entities_dropped: totalDropped } : {}),
     })
   } catch (error) {
+    if (error instanceof EmptyExtractionError) {
+      return NextResponse.json({
+        things: [],
+        entities: [],
+        hint: "I couldn't find anything specific in that — try describing what you can see or what's bothering you about it.",
+      })
+    }
     if (error instanceof Anthropic.APIError) {
       return NextResponse.json(
         { error: error.message || "AI request failed" },

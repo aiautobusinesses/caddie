@@ -16,7 +16,7 @@ import {
   saveCapturedThings,
 } from "@/lib/capture"
 import { getSupabasePublishableKey, getSupabaseUrl, getEncryptionKey, hasSupabaseEnv } from "@/lib/env"
-import { parseLifeWalkResultFromModelText } from "@/lib/lifewalk-parse"
+import { parseLifeWalkResultFromModelText, expandIntervals } from "@/lib/lifewalk-parse"
 import { createClient as createServiceClient } from "@/lib/supabase/server-service"
 import { isTaskUrgency, isStepEventInput } from "@/lib/tasks"
 
@@ -396,7 +396,7 @@ describe("lifewalk parser", () => {
 
   it("throws on invalid payloads", () => {
     expect(() => parseLifeWalkResultFromModelText("hello")).toThrow("No JSON object found")
-    expect(() => parseLifeWalkResultFromModelText(envelope([]))).toThrow("No valid things in model response")
+    expect(() => parseLifeWalkResultFromModelText(envelope([]))).toThrow("Nothing concrete found in narration")
   })
 
   it("filters null/non-object items in array (lib/lifewalk-parse.ts:100,138)", () => {
@@ -432,9 +432,9 @@ describe("lifewalk parser", () => {
     expect(result.things[0].name).toBe("Thing")
   })
 
-  it("handles missing things/entities keys — both default to empty, then throws", () => {
-    // An object with no things/entities keys → both lists empty → throws
-    expect(() => parseLifeWalkResultFromModelText("{}")).toThrow("No valid things in model response")
+  it("handles missing things/entities keys — both default to empty, throws EmptyExtractionError", () => {
+    // An object with no things/entities keys → both lists empty → EmptyExtractionError
+    expect(() => parseLifeWalkResultFromModelText("{}")).toThrow("Nothing concrete found in narration")
   })
 
   it("uses default tolerance_days=2 and overdue_days=7 when non-numeric (lib/lifewalk-parse.ts:153-154 false branch)", () => {
@@ -465,6 +465,71 @@ describe("lifewalk parser", () => {
     expect(result.entities).toHaveLength(0)
   })
 })
+
+
+describe("expandIntervals", () => {
+  it("produces all 12 keys from base_days alone", () => {
+    const result = expandIntervals({ base_days: 14 })
+    expect(Object.keys(result)).toHaveLength(12)
+    for (let m = 1; m <= 12; m++) {
+      expect(result[String(m)]).toBe(14)
+    }
+  })
+
+  it("applies summer_days to June, July, August; base_days to all other months", () => {
+    const result = expandIntervals({ base_days: 14, summer_days: 5 })
+    expect(result["6"]).toBe(5)
+    expect(result["7"]).toBe(5)
+    expect(result["8"]).toBe(5)
+    const winterMonths = [1, 2, 3, 4, 5, 9, 10, 11, 12]
+    for (const m of winterMonths) expect(result[String(m)]).toBe(14)
+  })
+
+  it("applies spring_days to March, April, May", () => {
+    const result = expandIntervals({ base_days: 14, spring_days: 10 })
+    expect(result["3"]).toBe(10)
+    expect(result["4"]).toBe(10)
+    expect(result["5"]).toBe(10)
+    expect(result["6"]).toBe(14) // summer unaffected
+  })
+
+  it("applies autumn_days to September, October, November", () => {
+    const result = expandIntervals({ base_days: 14, autumn_days: 10 })
+    expect(result["9"]).toBe(10)
+    expect(result["10"]).toBe(10)
+    expect(result["11"]).toBe(10)
+    expect(result["8"]).toBe(14) // summer unaffected
+  })
+
+  it("all three seasonal overrides together with base produces valid parseIntervals output", () => {
+    const expanded = expandIntervals({ base_days: 14, summer_days: 5, spring_days: 10, autumn_days: 10 })
+    expect(Object.keys(expanded)).toHaveLength(12)
+    const parsed = parseIntervals(expanded)
+    expect(parsed).not.toBeNull()
+    expect(parsed!["1"]).toBe(14)
+    expect(parsed!["6"]).toBe(5)
+    expect(parsed!["3"]).toBe(10)
+    expect(parsed!["9"]).toBe(10)
+    expect(parsed!["12"]).toBe(14)
+  })
+
+  it("ignores invalid summer_days (<1) and falls back to base", () => {
+    const result = expandIntervals({ base_days: 14, summer_days: 0 })
+    expect(result["7"]).toBe(14)
+  })
+
+  it("falls back to legacy intervals shape when base_days is absent", () => {
+    const legacy = { "1":7,"2":7,"3":7,"4":7,"5":7,"6":7,"7":7,"8":7,"9":7,"10":7,"11":7,"12":7 }
+    const result = expandIntervals({ intervals: legacy })
+    expect(result).toBe(legacy)
+  })
+
+  it("returns empty object when neither compact nor legacy shape is present", () => {
+    const result = expandIntervals({ name: "Fern" })
+    expect(result).toEqual({})
+  })
+})
+
 
 describe("normalizeDateOnly — branch coverage", () => {
   it("returns null when value is not a string (lib/lifewalk-parse.ts:10 false branch)", () => {

@@ -65,12 +65,14 @@ For each ENTITY return an object with:
 - kind: category in one or two words (e.g. "plant", "bin", "appliance")
 - location: where it lives if mentioned (e.g. "front room", "kitchen"); null if not mentioned
 - action: the primary recurring action, imperative (e.g. "Water", "Feed", "Put out", "Service")
-- intervals: object with keys "1" through "12" (month numbers as strings) mapping to integer days between care actions
+- care: object with care schedule — always include base_days (integer, days between actions for most of the year); add summer_days if summer differs from base; add spring_days or autumn_days only if that season also differs from base
 - tolerance_days: integer
 - overdue_days: integer
 
 Return ONLY a valid JSON object with two keys — no markdown, no code fences, no commentary:
 {"things":[...],"entities":[...]}
 
+If the narration contains nothing concrete enough to extract, return {"things":[],"entities":[]} and nothing else. Do not explain or ask follow-up questions.
+
 Example:
-{"things":[{"name":"Bath panel","class":"project","domain":"home","due_date":null,"notify_window":null,"notify_time_of_day":null,"notify_escalate":false,"steps":[{"name":"Measure up and order the right size panel","band":"short","mode":"thinking","shape":"clean","needs_know_how":false},{"name":"Remove old panel and treat mould on wall","band":"sitting","mode":"doing","shape":"bleeds","needs_know_how":true},{"name":"Fit new panel and seal edges","band":"sitting","mode":"doing","shape":"clean","needs_know_how":true}]},{"name":"MOT","class":"obligation","domain":"vehicle","due_date":"2026-03-15","notify_window":14,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Book MOT at the garage","band":"short","mode":"thinking","shape":"clean","needs_know_how":false}]}],"entities":[{"name":"Peace lily","kind":"plant","location":"bedroom","action":"Water","intervals":{"1":14,"2":14,"3":10,"4":7,"5":7,"6":7,"7":7,"8":7,"9":10,"10":14,"11":14,"12":14},"tolerance_days":2,"overdue_days":5}]}`
+{"things":[{"name":"Bath panel","class":"project","domain":"home","due_date":null,"notify_window":null,"notify_time_of_day":null,"notify_escalate":false,"steps":[{"name":"Measure up and order the right size panel","band":"short","mode":"thinking","shape":"clean","needs_know_how":false},{"name":"Remove old panel and treat mould on wall","band":"sitting","mode":"doing","shape":"bleeds","needs_know_how":true},{"name":"Fit new panel and seal edges","band":"sitting","mode":"doing","shape":"clean","needs_know_how":true}]},{"name":"MOT","class":"obligation","domain":"vehicle","due_date":"2026-03-15","notify_window":14,"notify_time_of_day":"morning","notify_escalate":true,"steps":[{"name":"Book MOT at the garage","band":"short","mode":"thinking","shape":"clean","needs_know_how":false}]}],"entities":[{"name":"Peace lily","kind":"plant","location":"bedroom","action":"Water","care":{"base_days":14,"summer_days":5},"tolerance_days":2,"overdue_days":5}]}`

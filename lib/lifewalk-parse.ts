@@ -28,7 +28,15 @@ function extractJsonPayload(text: string): Record<string, unknown> {
     const objStart = cleaned.indexOf("{")
     const objEnd = cleaned.lastIndexOf("}")
     if (objStart !== -1 && objEnd > objStart) {
-      parsed = JSON.parse(cleaned.slice(objStart, objEnd + 1))
+      const extracted = cleaned.slice(objStart, objEnd + 1)
+      const discarded = (cleaned.slice(0, objStart) + cleaned.slice(objEnd + 1)).trim()
+      if (discarded.length > 0) {
+        console.warn(
+          "[lifewalk-parse] model added content outside the JSON object (prompt violation):",
+          discarded.slice(0, 120),
+        )
+      }
+      parsed = JSON.parse(extracted)
     } else {
       throw new Error("No JSON object found in model response")
     }
@@ -149,6 +157,39 @@ function normalizeThing(raw: unknown): LifeWalkExtractedThing | null {
 // Entity normalisation
 // ---------------------------------------------------------------------------
 
+/**
+ * Expand the compact care shape produced by the model into a full 12-key
+ * MonthlyIntervals map ready for parseIntervals.
+ *
+ * Accepted shapes (in priority order):
+ *   1. Compact:  { base_days, summer_days?, spring_days?, autumn_days? }
+ *      - summer  = June–August   (6, 7, 8)
+ *      - spring  = March–May     (3, 4, 5)
+ *      - autumn  = September–November (9, 10, 11)
+ *      - all other months receive base_days
+ *   2. Legacy:   { "1": n, …, "12": n }  — raw intervals passed as item.intervals
+ *
+ * Exported for unit testing.
+ */
+export function expandIntervals(item: Record<string, unknown>): Record<string, unknown> {
+  if (typeof item.base_days === "number") {
+    const base = item.base_days
+    const summer = typeof item.summer_days === "number" && item.summer_days >= 1 ? item.summer_days : base
+    const spring = typeof item.spring_days === "number" && item.spring_days >= 1 ? item.spring_days : base
+    const autumn = typeof item.autumn_days === "number" && item.autumn_days >= 1 ? item.autumn_days : base
+    return {
+      "1": base,  "2": base,  "3": spring, "4": spring, "5": spring,
+      "6": summer, "7": summer, "8": summer,
+      "9": autumn, "10": autumn, "11": autumn,
+      "12": base,
+    }
+  }
+  // Legacy shape — raw intervals passed through as-is
+  return (item.intervals && typeof item.intervals === "object" && !Array.isArray(item.intervals))
+    ? item.intervals as Record<string, unknown>
+    : {}
+}
+
 function normalizeEntity(raw: unknown): LifeWalkExtractedEntity | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
   const item = raw as Record<string, unknown>
@@ -161,7 +202,13 @@ function normalizeEntity(raw: unknown): LifeWalkExtractedEntity | null {
   const location = typeof item.location === "string" ? item.location.trim() || null : null
   const action = typeof item.action === "string" ? item.action.trim() : "Care for"
 
-  const intervals = parseIntervals(item.intervals)
+  // New shape: item.care holds { base_days, summer_days?, … }
+  // Legacy shape: item.intervals holds { "1": n, … "12": n } — passed via item itself
+  const careSource =
+    item.care && typeof item.care === "object" && !Array.isArray(item.care)
+      ? (item.care as Record<string, unknown>)
+      : item
+  const intervals = parseIntervals(expandIntervals(careSource))
   if (!intervals) return null
 
   const tolerance_days = typeof item.tolerance_days === "number" ? item.tolerance_days : 2
@@ -173,6 +220,19 @@ function normalizeEntity(raw: unknown): LifeWalkExtractedEntity | null {
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
+
+/**
+ * Thrown when the model returns valid JSON with both `things` and `entities`
+ * empty — the narration was too vague to extract anything concrete.
+ * Routes catch this specifically to return a user-facing hint rather than
+ * treating it as a server error.
+ */
+export class EmptyExtractionError extends Error {
+  constructor() {
+    super("Nothing concrete found in narration")
+    this.name = "EmptyExtractionError"
+  }
+}
 
 export function parseLifeWalkResultFromModelText(text: string): LifeWalkExtractionResult {
   const payload = extractJsonPayload(text)
@@ -201,7 +261,7 @@ export function parseLifeWalkResultFromModelText(text: string): LifeWalkExtracti
   }
 
   if (things.length === 0 && entities.length === 0) {
-    throw new Error("No valid things in model response")
+    throw new EmptyExtractionError()
   }
 
   return { things, entities, entities_dropped }
@@ -257,6 +317,9 @@ export async function extractFromNarration(
   try {
     return parseLifeWalkResultFromModelText(textBlock.text)
   } catch (error) {
+    // Empty extraction is not a parse failure — let the route handle it
+    // with a user-facing hint rather than logging it as an error.
+    if (error instanceof EmptyExtractionError) throw error
     /* v8 ignore next */
     const msg = error instanceof Error ? error.message : "Could not parse things"
     // Log the raw model output so we can diagnose what went wrong
@@ -265,7 +328,6 @@ export async function extractFromNarration(
     /* v8 ignore next 4 */
     const isParseError =
       msg.includes("JSON") ||
-      msg.includes("No valid things") ||
       msg.includes("model response")
     throw new Error(
       /* v8 ignore next */
