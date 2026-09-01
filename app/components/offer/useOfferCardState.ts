@@ -88,6 +88,14 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     if (!pendingItem) return
     const item = pendingItem
     setPendingItem(null)
+    // Record the accepted event so needs_know_how is cleared server-side and the
+    // familiarity question never fires again for this step. Fire-and-forget: a
+    // write failure must not block the user from starting.
+    void fetch(`/api/steps/${item.step_id}/event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: "accepted" }),
+    })
     await commitStart(item)
   }
 
@@ -142,6 +150,10 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
         return
       }
 
+      // DB now has started_at = null — mirror that in local state so the focus
+      // screen is not re-rendered for a thing the server no longer considers active
+      // if refreshOffer() is delayed or fails.
+      setInProgress(null)
       setStopNoteStepId(stepId)
       setScreen("stop_note")
       return

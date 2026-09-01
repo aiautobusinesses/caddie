@@ -27,6 +27,21 @@ export async function GET() {
     void Promise.resolve(auth.supabase.from("step_events").insert(rows)).catch(() => {/* swallow */})
   }
 
+  // Set last_care_offer_date the moment a care group is included in a response.
+  // The once-daily cap must hold even if the user dismisses the card without reporting —
+  // recording it only at report time (in the report_care_group RPC) means the cap is
+  // bypassed whenever the user sees the card but doesn't submit.
+  // Fire-and-forget: a write failure must not block the offer response.
+  if (offerState.careGroup) {
+    const today = new Date().toISOString().split("T")[0]
+    void Promise.resolve(
+      auth.supabase
+        .from("profiles")
+        .update({ last_care_offer_date: today })
+        .eq("id", auth.user.id)
+    ).catch(() => {/* swallow */})
+  }
+
   return NextResponse.json({
     in_progress: offerState.inProgress,
     offer: offerState.offer,

@@ -294,23 +294,37 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
 
   // Design rule: at least one item per spread carries no time signal (null reason).
   // A project step gets a reason only when band === "short" ("quick one").
-  // Obligations always carry a due-date reason. If every project slot would produce
-  // "quick one" (all short-band), swap the last short-band slot for a non-short-band
-  // project from the pool — that item will have reason null, satisfying the rule.
-  // Only applies when there's at least one clock-bearing item in the spread;
-  // if there is no obligation or care group, the spread already has a no-reason item
-  // whenever any project has band !== "short".
-  const allPickedShort = pickedProjects.length > 0 && pickedProjects.every((t) => {
-    const ls = t.steps.find((s) => s.id === t.live_step_id)
-    return (ls?.band ?? "sitting") === "short"
-  })
-  if (allPickedShort && reservedSlots > 0) {
-    const nonShort = projects.find(
-      (t) => !pickedProjects.includes(t) && (t.steps.find((s) => s.id === t.live_step_id)?.band ?? "sitting") !== "short"
-    )
-    if (nonShort) {
-      // Replace the last picked project slot with the non-short-band item.
-      pickedProjects = [...pickedProjects.slice(0, pickedProjects.length - 1), nonShort]
+  // Obligations and care groups always carry a reason. So:
+  //   (a) If every picked project has band === "short", swap the last one for a
+  //       non-short project — that item will have reason null.
+  //   (b) If there are no picked projects at all but projects exist, add one
+  //       non-short project to fill a slot (capacity permitting), so the spread
+  //       isn't entirely composed of clock-bearing items.
+  // Neither branch applies when there is no clock-bearing item (reservedSlots === 0),
+  // because in that case the spread already has a no-reason item whenever any
+  // project has band !== "short".
+  if (reservedSlots > 0 && projects.length > 0) {
+    const allPickedShort = pickedProjects.length > 0 && pickedProjects.every((t) => {
+      const ls = t.steps.find((s) => s.id === t.live_step_id)
+      return (ls?.band ?? "sitting") === "short"
+    })
+    const noProjects = pickedProjects.length === 0
+
+    if (allPickedShort || noProjects) {
+      const nonShort = projects.find(
+        (t) => !pickedProjects.includes(t) && (t.steps.find((s) => s.id === t.live_step_id)?.band ?? "sitting") !== "short"
+      )
+      if (nonShort) {
+        if (allPickedShort) {
+          // Replace the last picked short-band slot with the non-short item.
+          pickedProjects = [...pickedProjects.slice(0, pickedProjects.length - 1), nonShort]
+        } else {
+          // No projects were picked; add the non-short item if a slot is free.
+          if (pickedProjects.length < 3 - reservedSlots) {
+            pickedProjects = [...pickedProjects, nonShort]
+          }
+        }
+      }
     }
   }
 

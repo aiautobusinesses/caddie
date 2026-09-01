@@ -162,6 +162,18 @@ export async function recordStepEvent(
       metadata,
     })
     if (eventError) throw new Error(eventError.message)
+
+    // `accepted` means the user answered "yes" to the familiarity question.
+    // Clear needs_know_how so the question never fires again for this step.
+    if (input.event_type === "accepted") {
+      const { error: clearError } = await supabase
+        .from("steps")
+        .update({ needs_know_how: false })
+        .eq("id", stepId)
+        .eq("user_id", userId)
+      if (clearError) throw new Error(clearError.message)
+    }
+
     return { ok: true }
   }
 
