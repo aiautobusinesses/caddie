@@ -60,6 +60,9 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       step_id: item.step_id,
       step_name: item.step_name,
       started_at: new Date().toISOString(),
+      // Nudge availability is unknown until the server confirms; refresh will correct these.
+      can_nudge_back: false,
+      can_nudge_forward: false,
     })
     setActionError(null)
     setJustStarted(true)
@@ -236,6 +239,24 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     }
   }
 
+  async function handleNudge(direction: "back" | "forward") {
+    if (!inProgress) return
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/things/${inProgress.thing_id}/nudge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction }),
+      })
+      if (!res.ok) throw new Error("Failed to nudge")
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Something went wrong")
+      return
+    }
+    // Refresh so the focus screen shows the new live step name and updated nudge flags.
+    void refreshOffer()
+  }
+
   async function handleAbandon() {
     if (!inProgress) return
     const thingId = inProgress.thing_id
@@ -286,6 +307,7 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     handleDone,
     handleStopNote,
     handleStopNoteSkip,
+    handleNudge,
     handleSkipAll,
     handleSaveName,
     handleAbandon,

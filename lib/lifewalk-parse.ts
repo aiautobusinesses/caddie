@@ -121,11 +121,20 @@ function normalizeThing(raw: unknown): LifeWalkExtractedThing | null {
 
   if (steps.length === 0) return null
 
+  const due_date = normalizeDateOnly(item.due_date)
+  // Design invariant: an obligation requires a due date (its trigger is the date).
+  // If the LLM omits the date, the item has no deadline and is a project by the
+  // design's own test — coerce rather than let it fall into the offer dead-zone.
+  const thingClass =
+    normalizeThingClass(item.class) === "obligation" && !due_date
+      ? "project"
+      : normalizeThingClass(item.class)
+
   return {
     name,
-    class: normalizeThingClass(item.class),
+    class: thingClass,
     domain: normalizeDomain(item.domain),
-    due_date: normalizeDateOnly(item.due_date),
+    due_date,
     notify_window:
       typeof item.notify_window === "number" ? item.notify_window : null,
     notify_time_of_day: normalizeNotifyTimeOfDay(item.notify_time_of_day),

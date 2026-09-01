@@ -22,8 +22,22 @@ Check:
 - **Edge cases** — does the code handle null / missing fields as the spec intends?
 - **Copy rules** — no encouragement copy, urgency language on projects, progress bars, or
   percentages anywhere in the UI (check all `app/components/` files).
-- **DB / RPC sync** — if a migration changes a Postgres function body, `supabase/functions.sql`
-  must be updated to match. It is the canonical single-file reference for all RPC bodies.
+- **DB / RPC sync** — run `node scripts/generate-functions-sql.mjs` to regenerate
+  `supabase/functions.sql` from the migrations before comparing anything against it.
+
+When code and spec disagree, determine which one is wrong before fixing anything:
+
+- **Code is wrong** — fix the code (the normal case).
+- **Doc is wrong** — do not fix the code to match a wrong spec. Instead, report the
+  discrepancy as a doc error: quote the offending sentence, state what the code actually
+  does and why that is correct, and propose the corrected wording. Do not silently update
+  `DESIGN.md`; surface it to the user for a conscious decision.
+- **Doc is ambiguous** — state the ambiguity explicitly. If two defensible readings lead
+  to different implementations, say so. Do not pick one silently.
+
+The doc can be wrong. It has been wrong before (recurrence model conflict, orphaned shape
+field). Treating it as infallible makes it unfalsifiable; the point of this audit is to
+find gaps in both directions.
 
 ## Step 3 — For each bug found, write a failing test first
 
@@ -104,8 +118,11 @@ Then list every new `INV:` test added, citing the design sentence each one pins.
 
 ## Project conventions
 
-- `supabase/functions.sql` — canonical current state of all Postgres RPCs; update it whenever
-  a migration changes a function body. Annotate each function with `-- last changed: migration NNN`.
+- `supabase/functions.sql` — generated from migrations, not maintained by hand. Run
+  `node scripts/generate-functions-sql.mjs` to rebuild it. The script concatenates every
+  `CREATE OR REPLACE FUNCTION` block from `supabase/migrations/*.sql` in order, keeping
+  the last definition of each function name. Do not edit `functions.sql` directly; edit
+  the migration and regenerate.
 - `schema.sql` — documentation only, not used to bootstrap anything (Supabase runs migrations).
   Keep it in sync with migrations so it isn't misleading.
 - Coverage: 100% enforced on `lib/**` and `app/api/**`; `app/components/**` is reported but not

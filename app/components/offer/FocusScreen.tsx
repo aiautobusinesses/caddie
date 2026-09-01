@@ -18,6 +18,7 @@ type Props = {
   actionError: string | null
   justStarted: boolean
   onDone: (stillGoing: boolean) => void
+  onNudge: (direction: "back" | "forward") => void
   onSaveName: (newName: string) => void
   onAbandon: () => void
 }
@@ -27,6 +28,7 @@ export default function FocusScreen({
   actionError,
   justStarted,
   onDone,
+  onNudge,
   onSaveName,
   onAbandon,
 }: Props) {
@@ -99,6 +101,28 @@ export default function FocusScreen({
         >
           Still going
         </button>
+        {(inProgress.can_nudge_back || inProgress.can_nudge_forward) && (
+          <div className="flex gap-2 mt-1">
+            {inProgress.can_nudge_back && (
+              <button
+                type="button"
+                onClick={() => onNudge("back")}
+                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1"
+              >
+                ← Step back
+              </button>
+            )}
+            {inProgress.can_nudge_forward && (
+              <button
+                type="button"
+                onClick={() => onNudge("forward")}
+                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1"
+              >
+                Step forward →
+              </button>
+            )}
+          </div>
+        )}
         {confirmingAbandon ? (
           <div className="flex flex-col gap-2 mt-1 border-t border-border pt-3">
             <p className="text-[12px] text-subtle">This can&rsquo;t be undone.</p>

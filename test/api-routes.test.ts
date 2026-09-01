@@ -7,13 +7,13 @@ vi.mock("@/lib/api/session", () => ({ getAuthenticatedContext: vi.fn() }))
 vi.mock("@/lib/thing-persistence", () => ({ persistThings: vi.fn() }))
 vi.mock("@/lib/things-service", async (importOriginal) => {
   const orig = await importOriginal<typeof import("@/lib/things-service")>()
-  return { ...orig, markThingDone: vi.fn(), markThingStillGoing: vi.fn(), recordStepEvent: vi.fn() }
+  return { ...orig, markThingDone: vi.fn(), markThingStillGoing: vi.fn(), recordStepEvent: vi.fn(), nudgeStep: vi.fn() }
 })
 vi.mock("@/lib/offer-data", () => ({ loadOfferData: vi.fn() }))
 
 import { getAuthenticatedContext } from "@/lib/api/session"
 import { persistThings } from "@/lib/thing-persistence"
-import { markThingDone, markThingStillGoing, recordStepEvent, ServiceError } from "@/lib/things-service"
+import { markThingDone, markThingStillGoing, nudgeStep, recordStepEvent, ServiceError } from "@/lib/things-service"
 import { loadOfferData } from "@/lib/offer-data"
 
 // Helper to build a fake authenticated context
@@ -563,6 +563,86 @@ describe("GET /api/offer", async () => {
     expect(updateFn).toHaveBeenCalledWith(expect.objectContaining({ last_care_offer_date: expect.any(String) }))
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// /api/things/[id]/nudge (POST)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/things/[id]/nudge", async () => {
+  const { POST } = await import("@/app/api/things/[id]/nudge/route")
+
+  function nudgeReq(body: unknown) {
+    return new NextRequest("http://localhost/api/things/t1/nudge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it("returns 401 when not authenticated", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(null)
+    const res = await POST(nudgeReq({ direction: "back" }), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(401)
+  })
+
+  it("returns 400 on invalid direction value", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    const res = await POST(nudgeReq({ direction: "sideways" }), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/direction/)
+  })
+
+  it("returns 400 when direction is missing", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    const res = await POST(nudgeReq({}), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(400)
+  })
+
+  it("returns 400 on invalid JSON body", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    const req = new NextRequest("http://localhost/api/things/t1/nudge", {
+      method: "POST",
+      body: "not json",
+    })
+    const res = await POST(req, { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(400)
+  })
+
+  it("calls nudgeStep with direction=back and returns ok", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    vi.mocked(nudgeStep).mockResolvedValue({ ok: true })
+    const res = await POST(nudgeReq({ direction: "back" }), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(200)
+    expect(nudgeStep).toHaveBeenCalledWith(expect.anything(), "t1", "u1", "back")
+  })
+
+  it("calls nudgeStep with direction=forward and returns ok", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    vi.mocked(nudgeStep).mockResolvedValue({ ok: true })
+    const res = await POST(nudgeReq({ direction: "forward" }), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(200)
+    expect(nudgeStep).toHaveBeenCalledWith(expect.anything(), "t1", "u1", "forward")
+  })
+
+  it("returns ServiceError status when nudgeStep throws ServiceError", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    vi.mocked(nudgeStep).mockRejectedValue(new ServiceError("No previous step to nudge back to", 400))
+    const res = await POST(nudgeReq({ direction: "back" }), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe("No previous step to nudge back to")
+  })
+
+  it("returns 500 on unexpected error from nudgeStep", async () => {
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    vi.mocked(nudgeStep).mockRejectedValue(new Error("db error"))
+    const res = await POST(nudgeReq({ direction: "forward" }), { params: Promise.resolve({ id: "t1" }) })
+    expect(res.status).toBe(500)
+  })
+})
+
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // /api/push/subscribe (POST)

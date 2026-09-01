@@ -188,3 +188,103 @@ export async function recordStepEvent(
 
   return { ok: true }
 }
+
+export type NudgeDirection = "back" | "forward"
+
+/**
+ * Nudge the live step of a thing back (to a previous step) or forward (to the
+ * next undone step).
+ *
+ * Nudge back:
+ *   - Finds the nearest step with step_order < current, re-opens it (done=false),
+ *     moves live_step_id to it, and writes a nudged_back event on the old step.
+ * Nudge forward:
+ *   - Finds the nearest undone step with step_order > current, moves live_step_id
+ *     to it, and writes a nudged_forward event on the old step.
+ *
+ * Throws ServiceError(404) if the thing or its live step is not found.
+ * Throws ServiceError(400) if there is no step to nudge to in that direction.
+ */
+export async function nudgeStep(
+  supabase: SupabaseClient<Database>,
+  thingId: string,
+  userId: string,
+  direction: NudgeDirection,
+): Promise<{ ok: true }> {
+  // Fetch the thing to get its current live_step_id.
+  const { data: thingRaw, error: thingError } = await supabase
+    .from("things")
+    .select("id, live_step_id")
+    .eq("id", thingId)
+    .eq("user_id", userId)
+    .single()
+
+  if (thingError || !thingRaw) throw new ServiceError("Thing not found", 404)
+
+  const thing = thingRaw as { id: string; live_step_id: string | null }
+  if (!thing.live_step_id) throw new ServiceError("Thing has no live step", 400)
+
+  // Fetch all steps for this thing so we can find prev/next by step_order.
+  const { data: stepsRaw, error: stepsError } = await supabase
+    .from("steps")
+    .select("id, step_order, done")
+    .eq("thing_id", thingId)
+    .eq("user_id", userId)
+    .order("step_order", { ascending: true })
+
+  if (stepsError || !stepsRaw) throw new ServiceError("Steps not found", 404)
+
+  const steps = stepsRaw as { id: string; step_order: number; done: boolean }[]
+  const currentStep = steps.find((s) => s.id === thing.live_step_id)
+  if (!currentStep) throw new ServiceError("Live step not found in steps", 404)
+
+  let targetStep: { id: string; step_order: number; done: boolean } | undefined
+
+  if (direction === "back") {
+    // Nearest step with step_order strictly less than current (any done state — re-opening it).
+    targetStep = [...steps]
+      .reverse()
+      .find((s) => s.step_order < currentStep.step_order)
+  } else {
+    // Nearest undone step with step_order strictly greater than current.
+    targetStep = steps.find((s) => s.step_order > currentStep.step_order && !s.done)
+  }
+
+  if (!targetStep) {
+    throw new ServiceError(
+      direction === "back" ? "No previous step to nudge back to" : "No next step to nudge forward to",
+      400,
+    )
+  }
+
+  // For nudge back: re-open the target step so it can be worked again.
+  if (direction === "back") {
+    const { error: reopenError } = await supabase
+      .from("steps")
+      .update({ done: false, done_at: null })
+      .eq("id", targetStep.id)
+      .eq("user_id", userId)
+    if (reopenError) throw new Error(reopenError.message)
+  }
+
+  // Move live_step_id to the target step.
+  const { error: updateError } = await supabase
+    .from("things")
+    .update({ live_step_id: targetStep.id })
+    .eq("id", thingId)
+    .eq("user_id", userId)
+  if (updateError) throw new Error(updateError.message)
+
+  // Write the nudge event against the original live step.
+  const eventType = direction === "back" ? "nudged_back" : "nudged_forward"
+  const { error: eventError } = await supabase.from("step_events").insert({
+    step_id: thing.live_step_id,
+    thing_id: thingId,
+    user_id: userId,
+    event_type: eventType,
+    metadata: null,
+  })
+  if (eventError) throw new Error(eventError.message)
+
+  return { ok: true }
+}

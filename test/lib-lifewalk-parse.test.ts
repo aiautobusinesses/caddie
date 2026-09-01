@@ -126,6 +126,29 @@ describe("parseLifeWalkResultFromModelText", () => {
     expect(result.things).toHaveLength(1)
     expect(result.entities).toHaveLength(1)
   })
+  it("coerces obligation with no due_date to project", () => {
+    const undatedObligation = {
+      ...VALID_THING,
+      class: "obligation",
+      due_date: null,
+      notify_window: null,
+    }
+    const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [undatedObligation], entities: [] }))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].class).toBe("project")
+  })
+
+  it("keeps obligation with a due_date as obligation", () => {
+    const datedObligation = {
+      ...VALID_THING,
+      class: "obligation",
+      due_date: "2026-03-15",
+      notify_window: 14,
+    }
+    const result = parseLifeWalkResultFromModelText(JSON.stringify({ things: [datedObligation], entities: [] }))
+    expect(result.things).toHaveLength(1)
+    expect(result.things[0].class).toBe("obligation")
+  })
 })
 
 describe("extractFromNarration", () => {

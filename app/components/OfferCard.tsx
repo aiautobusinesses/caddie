@@ -32,6 +32,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     handleDone,
     handleStopNote,
     handleStopNoteSkip,
+    handleNudge,
     handleSkipAll,
     handleSaveName,
     handleAbandon,
@@ -101,6 +102,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
             actionError={actionError}
             justStarted={justStarted}
             onDone={(stillGoing) => void handleDone(stillGoing)}
+            onNudge={(direction) => void handleNudge(direction)}
             onSaveName={(newName) => void handleSaveName(newName)}
             onAbandon={() => void handleAbandon()}
           />

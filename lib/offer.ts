@@ -35,6 +35,10 @@ export type InProgressThing = {
   step_id: string
   step_name: string
   started_at: string
+  /** True when there is a step with lower step_order (user can say Caddie is ahead). */
+  can_nudge_back: boolean
+  /** True when there is an undone step with higher step_order (user can say Caddie is behind). */
+  can_nudge_forward: boolean
 }
 
 export type OfferStepRow = {
@@ -219,12 +223,19 @@ function buildInProgressThing(things: OfferThingRow[]): InProgressThing | null {
   // Return null so the offer screen doesn't surface a broken focus card.
   if (!liveStep) return null
 
+  const can_nudge_back = inProgress.steps.some((s) => s.step_order < liveStep.step_order)
+  const can_nudge_forward = inProgress.steps.some(
+    (s) => s.step_order > liveStep.step_order && !s.done,
+  )
+
   return {
     thing_id: inProgress.id,
     thing_name: inProgress.name,
     step_id: liveStep.id,
     step_name: liveStep.name,
     started_at: inProgress.started_at as string,
+    can_nudge_back,
+    can_nudge_forward,
   }
 }
 
