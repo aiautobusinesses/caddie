@@ -97,13 +97,19 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     setPendingItem(null)
 
     // Prepend a lookup step via the API, then proceed to start the thing.
-    // The API handles inserting the new step and advancing live_step_id.
+    // The API advances live_step_id to the new step and returns its id.
+    // Use that id as step_id so stop events annotate the correct step.
+    let lookupStepId: string = item.step_id
     try {
-      await fetch(`/api/things/${item.thing_id}/prepend-lookup`, { method: "POST" })
+      const res = await fetch(`/api/things/${item.thing_id}/prepend-lookup`, { method: "POST" })
+      if (res.ok) {
+        const data = await res.json() as { step_id?: string }
+        if (typeof data.step_id === "string") lookupStepId = data.step_id
+      }
     } catch {
       // Non-fatal: still start, just without the prepended step
     }
-    await commitStart({ ...item, step_name: `Look up how to: ${item.step_name}`, needs_know_how: false })
+    await commitStart({ ...item, step_id: lookupStepId, step_name: `Look up how to: ${item.step_name}`, needs_know_how: false })
   }
 
   /**
@@ -121,12 +127,20 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     if (stillGoing) {
       const stepId = inProgress.step_id
 
-      // Clear started_at and record the stopped event in one server call.
-      void fetch(`/api/things/${inProgress.thing_id}/done`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ still_going: true }),
-      })
+      // Await the still-going call: it clears started_at and writes the stopped event.
+      // If it fails, stay on the focus screen and surface the error rather than moving
+      // to stop_note with the thing still in-progress in the DB.
+      try {
+        const res = await fetch(`/api/things/${inProgress.thing_id}/done`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ still_going: true }),
+        })
+        if (!res.ok) throw new Error("Failed to stop")
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "Something went wrong")
+        return
+      }
 
       setStopNoteStepId(stepId)
       setScreen("stop_note")

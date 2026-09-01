@@ -111,17 +111,21 @@ describe("computeOffer", () => {
     expect(result.offer).toHaveLength(0)
   })
 
-  it("includes thing with live_step_id null and steps.length === 0 in offer (no-step thing)", () => {
+  it("excludes no-step thing (live_step_id null, steps empty) — not actionable", () => {
+    // A thing with no steps cannot have a skipped or stopped event recorded against it.
+    // It must not appear in the offer.
     const thing = makeThing({ live_step_id: null, steps: [] })
     const result = computeOffer({ ...baseInput, things: [thing] })
-    expect(result.offer).toHaveLength(1)
-    expect(result.offer[0].step_name).toBe("Next thing on Thing 1")
+    expect(result.offer).toHaveLength(0)
   })
 
-  it("step_name falls back when no live step found", () => {
+  it("step_name falls back when live step row missing from join; step_id uses live_step_id not thing id", () => {
+    // live_step_id is set but the step row is absent from the join (data inconsistency).
+    // step_id must fall back to live_step_id, not thing.id, so event calls still target a step.
     const thing = makeThing({ live_step_id: "missing" })
     const result = computeOffer({ ...baseInput, things: [thing] })
     expect(result.offer[0].step_name).toBe("Next thing on Thing 1")
+    expect(result.offer[0].step_id).toBe("missing")
     expect(result.offer[0].band).toBe("sitting")
   })
 

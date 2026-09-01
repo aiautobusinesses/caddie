@@ -254,7 +254,10 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
     ? mapCareGroup(buildCareGroup(carePlans, today))
     : null
 
-  const available = things.filter((thing) => thing.live_step_id != null || thing.steps.length === 0)
+  // A thing is available to offer if it has an active live step.
+  // Things with steps but no live_step_id are mid-transition (e.g. all steps done); excluded.
+  // Things with no steps at all are not actionable and also excluded.
+  const available = things.filter((thing) => thing.live_step_id != null)
 
   const obligations = available.filter((thing) => {
     if (thing.class !== "obligation") return false
@@ -303,7 +306,10 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
     return {
       thing_id: thing.id,
       thing_name: thing.name,
-      step_id: liveStep?.id ?? thing.id,
+      // live_step_id is non-null on every item in `available` (filter above).
+      // liveStep is undefined only if the step row is missing from the join (data inconsistency);
+      // fall back to the known-valid live_step_id rather than the thing id.
+      step_id: liveStep?.id ?? (thing.live_step_id as string),
       step_name: stepName,
       band: liveStep?.band ?? "sitting",
       mode: liveStep?.mode ?? "doing",
