@@ -17,6 +17,14 @@ export default function AuthPage() {
   const router = useRouter()
   const [view, setView] = useState<View>("checking")
 
+  // If the user already has a valid session, send them straight to the app.
+  useEffect(() => {
+    void createClient().auth.getUser().then(({ data: { user } }) => {
+      if (user) router.replace("/")
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Email form state
   const [email, setEmail] = useState("")
   const [emailLoading, setEmailLoading] = useState(false)

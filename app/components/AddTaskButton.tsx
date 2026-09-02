@@ -7,7 +7,11 @@ export default function AddTaskButton() {
   const pathname = usePathname()
   const { openCapture } = useCapture()
 
-  if (pathname.startsWith("/auth") || pathname.startsWith("/lifewalk")) {
+  if (
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/lifewalk") ||
+    pathname.startsWith("/setup")
+  ) {
     return null
   }
 

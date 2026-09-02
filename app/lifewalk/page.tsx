@@ -13,7 +13,7 @@ function LifeWalkInner() {
   return (
     <TaskCaptureFlow
       variant="lifewalk"
-      onBack={fromSettings ? () => router.back() : undefined}
+      onBack={fromSettings ? () => router.back() : () => router.push("/")}
       onSaved={async () => {
         await completeOnboarding()
         router.push("/")

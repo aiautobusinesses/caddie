@@ -32,7 +32,6 @@ export default function SetupPage() {
       return
     }
 
-    router.refresh()
     router.push("/")
   }
 

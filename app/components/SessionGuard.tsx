@@ -35,7 +35,9 @@ export default function SessionGuard({ children }: Props) {
   const offerChecked = useRef(false)
 
   const isAuthRoute =
-    pathname.startsWith("/auth") || pathname.startsWith("/lifewalk")
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/lifewalk") ||
+    pathname.startsWith("/setup")
 
   // ── Offer passkey setup after a fresh sign-in ─────────────────────────────
   // Use a scheduler-deferred setState so it doesn't fire synchronously inside

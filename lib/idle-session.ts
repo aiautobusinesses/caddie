@@ -31,11 +31,11 @@ export function recordActivity() {
 export function getLastActive(): number {
   try {
     const raw = localStorage.getItem(LAST_ACTIVE_KEY)
-    // Return 0 (epoch) when no record exists so the session is treated as
-    // expired — prevents a missing key from suppressing the idle lock.
-    return raw ? parseInt(raw, 10) : 0
+    // No record means the user just signed in — treat as active now so the
+    // idle lock doesn't fire immediately on first load.
+    return raw ? parseInt(raw, 10) : Date.now()
   } catch {
-    return 0
+    return Date.now()
   }
 }
 

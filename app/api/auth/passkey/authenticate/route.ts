@@ -12,9 +12,6 @@ const RP_ID =
     ? new URL(process.env.NEXT_PUBLIC_SITE_URL).hostname
     : "localhost")
 
-const ORIGIN =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
-
 /** GET — issue an authentication challenge for a given credential */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -60,6 +57,13 @@ export async function GET(request: Request) {
 
 /** POST — verify assertion and return a Supabase session */
 export async function POST(request: Request) {
+  // Derive the expected origin from the env var (production) or the request
+  // itself (dev). Never fall back to a hardcoded string so that
+  // cross-environment deployments (preview, prod) always match.
+  const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL
+  const requestOrigin = request.headers.get("origin") ?? ""
+  const ORIGIN = configuredOrigin ?? requestOrigin
+
   const body = await request.json().catch(() => null)
   if (
     !body?.credentialId ||

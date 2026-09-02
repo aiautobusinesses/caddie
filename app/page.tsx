@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import OfferCard from "./components/OfferCard"
 import { createClient } from "@/lib/supabase/server"
 import { loadOfferData } from "@/lib/offer-data"
+import ErrorMessage from "./components/ErrorMessage"
 
 export default async function Home() {
   const supabase = await createClient()
@@ -17,13 +18,13 @@ export default async function Home() {
     .eq("id", user.id)
     .single()
 
-  if (!profile?.onboarding_done) redirect("/lifewalk")
-
-  // Ensure the user has configured their Anthropic key before reaching the main app.
+  // Ensure the user has configured their Anthropic key before anything else.
   if (!profile?.anthropic_api_key?.trim()) redirect("/setup")
 
+  if (!profile?.onboarding_done) redirect("/lifewalk")
+
   const { result: offerState, error } = await loadOfferData(supabase, user.id)
-  if (error) throw new Error(error)
+  if (error) return <ErrorMessage message={error} />
 
   return (
     <OfferCard
