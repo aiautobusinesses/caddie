@@ -1,29 +1,22 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthenticatedContext } from "@/lib/api/session"
-import Anthropic from "@anthropic-ai/sdk"
 import { encrypt } from "@/lib/encryption"
 
 /**
  * POST /api/ai-key
  * Body: { key: string }
  *
- * Validates the supplied Anthropic key with a lightweight API call, then
- * stores it against the authenticated user's profile. The key is never
- * returned to the client after this point.
+ * Validates the key format, then stores it encrypted against the user's
+ * profile. Live API validation is intentionally skipped — it can fail for
+ * network reasons unrelated to key validity and blocks onboarding. A bad
+ * key will surface as an error on the first AI call instead.
  *
  * DELETE /api/ai-key
  * Removes the stored key for the authenticated user.
  */
 
-async function validateAnthropicKey(key: string): Promise<boolean> {
-  try {
-    const client = new Anthropic({ apiKey: key })
-    await client.models.list(undefined, { signal: AbortSignal.timeout(10_000) })
-    return true
-  } catch {
-    return false
-  }
-}
+/** Anthropic keys follow the pattern sk-ant-api03-<base64url chars> */
+const ANTHROPIC_KEY_RE = /^sk-ant-api\d{2}-[\w-]{80,}$/
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedContext()
@@ -41,9 +34,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "API key is required" }, { status: 400 })
   }
 
-  const valid = await validateAnthropicKey(key)
-  if (!valid) {
-    return NextResponse.json({ error: "The API key is invalid or could not be verified." }, { status: 422 })
+  if (!ANTHROPIC_KEY_RE.test(key)) {
+    return NextResponse.json(
+      { error: "That doesn't look like an Anthropic API key. It should start with sk-ant-api03-." },
+      { status: 422 },
+    )
   }
 
   const { error } = await auth.supabase
