@@ -17,6 +17,7 @@ type Props = {
   inProgress: InProgressThing
   actionError: string | null
   justStarted: boolean
+  nudging: boolean
   onDone: (stillGoing: boolean) => void
   onNudge: (direction: "back" | "forward") => void
   onSaveName: (newName: string) => void
@@ -27,6 +28,7 @@ export default function FocusScreen({
   inProgress,
   actionError,
   justStarted,
+  nudging,
   onDone,
   onNudge,
   onSaveName,
@@ -107,18 +109,20 @@ export default function FocusScreen({
               <button
                 type="button"
                 onClick={() => onNudge("back")}
-                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1"
+                disabled={nudging}
+                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                ← Step back
+                {nudging ? "…" : "← Step back"}
               </button>
             )}
             {inProgress.can_nudge_forward && (
               <button
                 type="button"
                 onClick={() => onNudge("forward")}
-                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1"
+                disabled={nudging}
+                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Step forward →
+                {nudging ? "…" : "Step forward →"}
               </button>
             )}
           </div>

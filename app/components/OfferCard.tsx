@@ -25,6 +25,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     thingComplete,
     setThingComplete,
     justStarted,
+    nudging,
     refreshOffer,
     handleStart,
     handleFamiliarityYes,
@@ -101,6 +102,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
             inProgress={inProgress}
             actionError={actionError}
             justStarted={justStarted}
+            nudging={nudging}
             onDone={(stillGoing) => void handleDone(stillGoing)}
             onNudge={(direction) => void handleNudge(direction)}
             onSaveName={(newName) => void handleSaveName(newName)}

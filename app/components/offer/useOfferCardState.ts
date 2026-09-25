@@ -135,35 +135,38 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     if (!inProgress) return
     setActionError(null)
 
-    if (stillGoing) {
-      const stepId = inProgress.step_id
+    const thingId = inProgress.thing_id
+    const stepId = inProgress.step_id
 
-      // Await the still-going call: it clears started_at and writes the stopped event.
-      // If it fails, stay on the focus screen and surface the error rather than moving
-      // to stop_note with the thing still in-progress in the DB.
+    if (stillGoing) {
+      // Optimistic: flip to stop_note immediately so the UI responds at tap speed.
+      // Fire the network call in the background; roll back on failure.
+      setInProgress(null)
+      setStopNoteStepId(stepId)
+      setScreen("stop_note")
+
       try {
-        const res = await fetch(`/api/things/${inProgress.thing_id}/done`, {
+        const res = await fetch(`/api/things/${thingId}/done`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ still_going: true }),
         })
         if (!res.ok) throw new Error("Failed to stop")
       } catch (e) {
+        // Roll back: restore focus screen with error
+        setInProgress(inProgress)
+        setStopNoteStepId(null)
+        setScreen("focus")
         setActionError(e instanceof Error ? e.message : "Something went wrong")
-        return
       }
-
-      // DB now has started_at = null — mirror that in local state so the focus
-      // screen is not re-rendered for a thing the server no longer considers active
-      // if refreshOffer() is delayed or fails.
-      setInProgress(null)
-      setStopNoteStepId(stepId)
-      setScreen("stop_note")
       return
     }
 
+    // Optimistic: trigger refresh spinner immediately, fire POST in background.
+    void refreshOffer()
+
     try {
-      const res = await fetch(`/api/things/${inProgress.thing_id}/done`, {
+      const res = await fetch(`/api/things/${thingId}/done`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ still_going: false }),
@@ -175,12 +178,9 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
           setThingComplete(null)
           void refreshOffer()
         }, 1500)
-      } else {
-        void refreshOffer()
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Something went wrong")
-      void refreshOffer()
     }
   }
 
@@ -239,9 +239,12 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     }
   }
 
+  const [nudging, setNudging] = useState(false)
+
   async function handleNudge(direction: "back" | "forward") {
-    if (!inProgress) return
+    if (!inProgress || nudging) return
     setActionError(null)
+    setNudging(true)
     try {
       const res = await fetch(`/api/things/${inProgress.thing_id}/nudge`, {
         method: "POST",
@@ -251,10 +254,12 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       if (!res.ok) throw new Error("Failed to nudge")
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Something went wrong")
+      setNudging(false)
       return
     }
     // Refresh so the focus screen shows the new live step name and updated nudge flags.
-    void refreshOffer()
+    await refreshOffer()
+    setNudging(false)
   }
 
   async function handleAbandon() {
@@ -300,6 +305,7 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     thingComplete,
     setThingComplete,
     justStarted,
+    nudging,
     refreshOffer,
     handleStart,
     handleFamiliarityYes,
