@@ -7,7 +7,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
 }
 
-const DISMISSED_KEY = "caddie:install-dismissed"
+const DISMISSED_KEY = "gyst:install-dismissed"
 
 export default function InstallBanner() {
   const [promptEvent, setPromptEvent] =
@@ -59,7 +59,7 @@ export default function InstallBanner() {
         />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-fg leading-tight">
-            Add Caddie to your home screen
+            Add GYST to your home screen
           </p>
           <p className="text-xs text-muted mt-0.5 leading-tight">
             Get the full app experience

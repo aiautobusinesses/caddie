@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react"
 
-const LAST_ACTIVE_KEY = "caddie:last-active"
+const LAST_ACTIVE_KEY = "gyst:last-active"
 
 /** How long (ms) the app can be idle before triggering a lock. Default: 30 min */
 const DEFAULT_IDLE_MS = 30 * 60 * 1000

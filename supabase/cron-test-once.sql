@@ -2,7 +2,7 @@
 -- 1. Replace YOUR_PROJECT_REF and YOUR_SERVICE_ROLE_KEY
 -- 2. Run this script
 -- 3. Wait 2–4 minutes, then run the verify queries below
--- 4. When done: select cron.unschedule((select jobid from cron.job where jobname = 'caddie-notify-test'));
+-- 4. When done: select cron.unschedule((select jobid from cron.job where jobname = 'gyst-notify-test'));
 
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net with schema extensions;
@@ -10,14 +10,14 @@ create extension if not exists pg_net with schema extensions;
 do $$
 declare j bigint;
 begin
-  select jobid into j from cron.job where jobname = 'caddie-notify-test';
+  select jobid into j from cron.job where jobname = 'gyst-notify-test';
   if j is not null then
     perform cron.unschedule(j);
   end if;
 end $$;
 
 select cron.schedule(
-  'caddie-notify-test',
+  'gyst-notify-test',
   '*/2 * * * *',
   $$
     select net.http_post(
@@ -32,12 +32,12 @@ select cron.schedule(
 );
 
 -- Verify the job exists
-select jobid, jobname, schedule, active from cron.job where jobname = 'caddie-notify-test';
+select jobid, jobname, schedule, active from cron.job where jobname = 'gyst-notify-test';
 
 -- After 2+ minutes: did cron run?
 select jobid, jobname, status, return_message, start_time, end_time
 from cron.job_run_details
-where jobid = (select jobid from cron.job where jobname = 'caddie-notify-test')
+where jobid = (select jobid from cron.job where jobname = 'gyst-notify-test')
 order by start_time desc
 limit 5;
 

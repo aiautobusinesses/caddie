@@ -248,7 +248,7 @@ export default function TaskCaptureFlow({
             disabled={!transcript.trim()}
             className="w-full mt-4 bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            Let Caddie sort this out
+            Let GYST sort this out
           </button>
         </div>
       </div>
@@ -262,7 +262,7 @@ export default function TaskCaptureFlow({
           <Spinner size={36} />
         </div>
         <p className="text-2xl font-semibold text-fg mb-2">Sorting it out…</p>
-        <p className="text-sm text-muted">Caddie is working through what you said.</p>
+        <p className="text-sm text-muted">GYST is working through what you said.</p>
       </div>
     )
   }

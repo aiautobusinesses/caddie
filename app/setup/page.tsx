@@ -39,13 +39,13 @@ export default function SetupPage() {
     <div className="flex flex-col items-center justify-center min-h-dvh px-6">
       <div className="w-full max-w-sm">
         <p className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
-          Caddie
+          GYST
         </p>
         <h1 className="text-2xl font-semibold text-fg text-center mb-2">
           Connect your AI
         </h1>
         <p className="text-sm text-muted text-center mb-8">
-          Caddie uses your own Anthropic API key for all AI-powered features.
+          GYST uses your own Anthropic API key for all AI-powered features.
           Your key is stored securely and never shared.
         </p>
 

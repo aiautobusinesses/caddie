@@ -63,7 +63,7 @@ export default function BiometricAuth({ onSuccess, onFallback }: Props) {
     <div className="fixed inset-0 z-50 bg-bg flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm flex flex-col items-center">
         <p className="text-xs uppercase tracking-widest text-muted mb-2">
-          Caddie
+          GYST
         </p>
 
         {/* Fingerprint icon */}

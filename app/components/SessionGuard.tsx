@@ -19,7 +19,7 @@ type OverlayState =
   | "biometric-reauth"
   | "passkey-setup"
 
-const PASSKEY_OFFERED_KEY = "caddie:passkey-offered"
+const PASSKEY_OFFERED_KEY = "gyst:passkey-offered"
 
 /** How long (ms) before idle lock kicks in — 30 minutes */
 const IDLE_MS = 30 * 60 * 1000

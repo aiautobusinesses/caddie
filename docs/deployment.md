@@ -1,6 +1,6 @@
-# Caddie — Deployment & Operations Checklist
+# GYST — Deployment & Operations Checklist
 
-This document covers what you need to deploy Caddie to Vercel for standard and Advanced account usage.
+This document covers what you need to deploy GYST to Vercel for standard and Advanced account usage.
 
 ---
 
@@ -35,7 +35,7 @@ The `005` migration adds:
 
 ### User accounts
 
-Caddie is **invite-only**. Users must have a matching row in the `invites` table before their first sign-in will fully activate their account. The `internal.handle_new_user()` trigger creates a profile automatically on first auth; `acceptInvite()` (called in `/auth/confirm`) promotes their `account_tier` from the invite record.
+GYST is **invite-only**. Users must have a matching row in the `invites` table before their first sign-in will fully activate their account. The `internal.handle_new_user()` trigger creates a profile automatically on first auth; `acceptInvite()` (called in `/auth/confirm`) promotes their `account_tier` from the invite record.
 
 To invite someone, insert a row into `invites` directly:
 
@@ -98,7 +98,7 @@ where email = 'user@example.com';
 
 ## Mobile PWA
 
-Caddie is a PWA. On iOS, users can add it to the Home Screen from Safari. On Android, Chrome prompts for installation automatically.
+GYST is a PWA. On iOS, users can add it to the Home Screen from Safari. On Android, Chrome prompts for installation automatically.
 
 Push notifications use the Web Push API. The service worker (`public/sw.js`) must be served at the root. Vercel handles this automatically via the `public/` directory — no special configuration needed.
 

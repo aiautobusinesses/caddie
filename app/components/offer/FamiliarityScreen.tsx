@@ -22,7 +22,7 @@ export default function FamiliarityScreen({ item, onYes, onNo }: Props) {
           Know how to {item.step_name.toLowerCase()}?
         </h2>
         <p className="mt-3.5 text-sm text-muted">
-          If not, Caddie will add a quick look-up step first.
+          If not, GYST will add a quick look-up step first.
         </p>
       </div>
 

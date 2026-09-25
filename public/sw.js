@@ -1,6 +1,6 @@
 // ── Cache names ───────────────────────────────────────────────────────────────
-const SHELL_CACHE = "caddie-shell-v1"
-const FONT_CACHE = "caddie-fonts-v1"
+const SHELL_CACHE = "gyst-shell-v1"
+const FONT_CACHE = "gyst-fonts-v1"
 
 // App shell resources to pre-cache on install
 const SHELL_URLS = [
@@ -139,7 +139,7 @@ function offlinePage() {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Caddie — Offline</title>
+  <title>GYST — Offline</title>
   <style>
     body {
       background: #16181c;
@@ -160,7 +160,7 @@ function offlinePage() {
   </style>
 </head>
 <body>
-  <img src="/icons/icon-192.png" alt="Caddie"/>
+  <img src="/icons/icon-192.png" alt="GYST"/>
   <h1>You&rsquo;re offline</h1>
   <p>Check your connection and try again.</p>
 </body>
@@ -185,7 +185,7 @@ function postTaskEvent(taskId, body) {
 self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? {}
   event.waitUntil(
-    self.registration.showNotification(data.title ?? "Caddie", {
+    self.registration.showNotification(data.title ?? "GYST", {
       body: data.body ?? "",
       data: { taskId: data.taskId },
       actions: [

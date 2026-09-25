@@ -97,7 +97,7 @@ export default function CarePlanEditor({
           <div className="bg-surface border border-border rounded-[14px] px-4 py-3 text-[12.5px] leading-[1.5] text-subtle">
             {note
               ? note
-              : "This is a suggested starting plan — change it if you know better. Caddie will never overwrite your edits."}
+              : "This is a suggested starting plan — change it if you know better. GYST will never overwrite your edits."}
           </div>
         )}
 
@@ -171,7 +171,7 @@ export default function CarePlanEditor({
             className="bg-surface border border-border rounded-[10px] px-4 py-3 text-base text-fg focus:outline-none focus:border-muted transition-colors"
           />
           <p className="text-[11.5px] text-muted">
-            After this many days past due, Caddie will say so plainly.
+            After this many days past due, GYST will say so plainly.
           </p>
         </div>
 

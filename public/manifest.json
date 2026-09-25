@@ -1,7 +1,7 @@
 {
-  "name": "Caddie",
-  "short_name": "Caddie",
-  "description": "Your life admin caddie",
+  "name": "GYST",
+  "short_name": "GYST",
+  "description": "Get Your Stuff Together",
   "start_url": "/",
   "id": "/",
   "display": "standalone",
@@ -37,7 +37,7 @@
       "sizes": "512x512",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Caddie home screen"
+      "label": "GYST home screen"
     }
   ],
   "shortcuts": [

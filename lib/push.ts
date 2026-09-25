@@ -64,9 +64,9 @@ export async function showLocalTestNotification(): Promise<{
 
     await navigator.serviceWorker.ready
 
-    await registration.showNotification("Caddie test", {
+    await registration.showNotification("GYST test", {
       body: "If you see this, notifications are set up on this device.",
-      tag: "caddie-test",
+      tag: "gyst-test",
     })
 
     return { ok: true }

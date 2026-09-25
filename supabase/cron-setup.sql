@@ -1,4 +1,4 @@
--- Caddie: schedule the notify Edge Function (run once in SQL Editor)
+-- GYST: schedule the notify Edge Function (run once in SQL Editor)
 --
 -- BEFORE RUNNING:
 -- 1. Dashboard → Database → Extensions → enable pg_cron and pg_net
@@ -19,11 +19,11 @@ begin
     select jobid
     from cron.job
     where jobname in (
-      'caddie-notify',
-      'caddie-notify-morning',
-      'caddie-notify-afternoon',
-      'caddie-notify-evening',
-      'caddie-notify-test'
+      'gyst-notify',
+      'gyst-notify-morning',
+      'gyst-notify-afternoon',
+      'gyst-notify-evening',
+      'gyst-notify-test'
     )
   loop
     perform cron.unschedule(job.jobid);
@@ -34,7 +34,7 @@ end $$;
 -- Replace YOUR_PROJECT_REF and YOUR_SERVICE_ROLE_KEY in all three blocks.
 
 select cron.schedule(
-  'caddie-notify-morning',
+  'gyst-notify-morning',
   '0 8 * * *',
   $$
     select net.http_post(
@@ -49,7 +49,7 @@ select cron.schedule(
 );
 
 select cron.schedule(
-  'caddie-notify-afternoon',
+  'gyst-notify-afternoon',
   '0 13 * * *',
   $$
     select net.http_post(
@@ -64,7 +64,7 @@ select cron.schedule(
 );
 
 select cron.schedule(
-  'caddie-notify-evening',
+  'gyst-notify-evening',
   '0 18 * * *',
   $$
     select net.http_post(
@@ -79,4 +79,4 @@ select cron.schedule(
 );
 
 -- ── Verify (should return 3 rows) ────────────────────────────────────
-select jobid, jobname, schedule, active from cron.job where jobname like 'caddie-notify-%' and jobname != 'caddie-notify-test';
+select jobid, jobname, schedule, active from cron.job where jobname like 'gyst-notify-%' and jobname != 'gyst-notify-test';

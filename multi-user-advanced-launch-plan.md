@@ -1,7 +1,7 @@
 # Multi-user Advanced Launch Plan
 
 ## Overview
-Build Caddie as an invite-only multi-user app where each user has a private account and private data by default. Every user must provide their own Anthropic API key to use AI-powered capture. Standard users interact with Caddie through the authenticated app on their phone, including life walk and voice-to-task capture. Selected users can be activated as Advanced users, which unlocks optional external integrations such as Home Assistant and Google for that specific user account. The implementation should preserve Supabase Auth plus RLS as the default security model, centralize AI provider resolution server-side, and isolate privileged integration paths from normal user flows.
+Build GYST as an invite-only multi-user app where each user has a private account and private data by default. Every user must provide their own Anthropic API key to use AI-powered capture. Standard users interact with GYST through the authenticated app on their phone, including life walk and voice-to-task capture. Selected users can be activated as Advanced users, which unlocks optional external integrations such as Home Assistant and Google for that specific user account. The implementation should preserve Supabase Auth plus RLS as the default security model, centralize AI provider resolution server-side, and isolate privileged integration paths from normal user flows.
 
 ## Sub-tasks
 

@@ -301,7 +301,7 @@ export default function SettingsScreen() {
       </div>
 
       <p className="flex-none px-6 py-[18px] text-[12px] leading-[1.5] text-muted">
-        Caddie is holding everything you&rsquo;ve told it. It will never show you the total.
+        GYST is holding everything you&rsquo;ve told it. It will never show you the total.
       </p>
     </>
   )

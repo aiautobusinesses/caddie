@@ -23,7 +23,7 @@ export function isPasskeySupported(): boolean {
 /** Returns the stored credential id (base64url) if one has been enrolled. */
 export function getStoredCredentialId(): string | null {
   try {
-    return localStorage.getItem("caddie:passkey-id")
+    return localStorage.getItem("gyst:passkey-id")
   } catch {
     return null
   }
@@ -31,7 +31,7 @@ export function getStoredCredentialId(): string | null {
 
 export function storeCredentialId(id: string) {
   try {
-    localStorage.setItem("caddie:passkey-id", id)
+    localStorage.setItem("gyst:passkey-id", id)
   } catch {
     // ignore — storage blocked
   }
@@ -39,7 +39,7 @@ export function storeCredentialId(id: string) {
 
 export function clearCredentialId() {
   try {
-    localStorage.removeItem("caddie:passkey-id")
+    localStorage.removeItem("gyst:passkey-id")
   } catch {
     // ignore
   }
@@ -97,7 +97,7 @@ export async function registerPasskey(): Promise<
     // 2. Create credential (triggers biometric prompt)
     const credential = await navigator.credentials.create({
       publicKey: {
-        rp: { id: rpId, name: "Caddie" },
+        rp: { id: rpId, name: "GYST" },
         user: {
           id: base64urlToBuffer(userId),
           name: userName,

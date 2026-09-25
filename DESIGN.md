@@ -1,4 +1,4 @@
-# Caddie — design
+# GYST — design
 
 *Written August 2026. Supersedes the May 2026 "home intelligence" concept.*
 *Updated with ADHD-mechanisms and brain-research addendum findings.*
@@ -9,7 +9,7 @@
 
 ## What it is
 
-Caddie keeps track of everything you've got on — the stuff that has to happen anyway, and the stuff you'd like to get round to — and never shows you the whole lot at once. It works out the steps for you without telling you how many there are, and when you turn up wanting something to do, it offers two or three things you could start now. It cares about you starting, not finishing. It keeps a record of what you actually did and shows it back as things you've done, not as how far through you are. And if you don't do it, nothing bad happens, and it tells you so.
+GYST keeps track of everything you've got on — the stuff that has to happen anyway, and the stuff you'd like to get round to — and never shows you the whole lot at once. It works out the steps for you without telling you how many there are, and when you turn up wanting something to do, it offers two or three things you could start now. It cares about you starting, not finishing. It keeps a record of what you actually did and shows it back as things you've done, not as how far through you are. And if you don't do it, nothing bad happens, and it tells you so.
 
 ---
 
@@ -30,7 +30,7 @@ Four separable parts:
 
 ## What the evidence says
 
-Reliability tiers matter — the design leans on the top tier for what it *refuses* to do, and on weaker ground for what it *does*. Full citations in `caddie-references.md`.
+Reliability tiers matter — the design leans on the top tier for what it *refuses* to do, and on weaker ground for what it *does*. Full citations in `GYST-references.md`.
 
 ### Reliable (meta-analytic, large samples, replicated)
 
@@ -91,7 +91,7 @@ Ariely & Wertenbroch commitment devices (replication failed; one study halved co
 
 ## Three classes
 
-Everything Caddie holds falls into one of three classes. They share the offer surface and almost nothing else.
+Everything GYST holds falls into one of three classes. They share the offer surface and almost nothing else.
 
 | | **Obligation** | **Project** | **Recurring care** |
 |---|---|---|---|
@@ -121,13 +121,13 @@ Wanted and enjoyable things — things you'd actually like to do — should be c
 Everything, out of your head. Chains stored whole, never shown whole.
 
 ### Offer
-You arrive wanting something to do; Caddie answers.
+You arrive wanting something to do; GYST answers.
 
 - **The unit is the live step, not the thing.** "Order a bath panel", never "bath panel". This is the finding the whole design turns on.
-- Two or three offers of **deliberately different shapes** — ends inside ten minutes / already started / wants a proper run — so the right one is obvious without Caddie asking how long you've got or how you feel.
+- Two or three offers of **deliberately different shapes** — ends inside ten minutes / already started / wants a proper run — so the right one is obvious without GYST asking how long you've got or how you feel.
 - **One clock-bearing slot per spread, maximum.** Obligations and care groups both carry real consequence and compete for that one slot; obligations win when both are due. Project steps never get urgency language even if a date is attached — manufactured urgency on a project step is spurious by definition, and the mere urgency effect means it crowds out things that genuinely matter.
 - **At least one item per spread carries no time signal at all.** Deliberately protected. Prefer a true non-clock reason ("you started this", "quick one"); fall back to no reason only if none applies.
-- Reason attached, always true. **Specific when Caddie knows, generic when it doesn't** ("next thing on the bath panel"). Never invents a fact to justify an offer. Concrete gaps: "MOT's due in 12 days", never "due soon".
+- Reason attached, always true. **Specific when GYST knows, generic when it doesn't** ("next thing on the bath panel"). Never invents a fact to justify an offer. Concrete gaps: "MOT's due in 12 days", never "due soon".
 - Buying is a step like any other, not a blocker.
 - The spread varies on **band, mode and domain** — avoid clustering two items on the same axis when alternatives exist.
 
@@ -140,7 +140,7 @@ The shape spread is a consequence of picking across varied things, not a filter.
 - `shape` (clean / bleeds) — whether the step has a natural end. Two consumers: a `short` slot prefers `clean` steps, since a step that bleeds can't be finished in a gap; and the stopping ritual matters most on `bleeds` steps, where there's no natural stopping point to remember.
 
 ### Accept
-One question, only when the answer changes what Caddie would offer. Two cases: **materials** ("got the paint?") and **familiarity** ("know how to prep walls?") *(implementation-derived)*. A "no" never blocks — it either moves the live step to buying the material, or prepends a short lookup step. The correction is persisted; the question fires at most once per step.
+One question, only when the answer changes what GYST would offer. Two cases: **materials** ("got the paint?") and **familiarity** ("know how to prep walls?") *(implementation-derived)*. A "no" never blocks — it either moves the live step to buying the material, or prepends a short lookup step. The correction is persisted; the question fires at most once per step.
 
 ### Stop
 The stopping ritual is structural, not polish. Without it, "leave you mid-thing" is just an unfinished job — field data shows more than two intervening activities before interrupted work resumes, and sometimes it never does.
@@ -152,7 +152,7 @@ When stopping: say where you got to (spoken or typed), plus a photo where it mak
 Resumption is always the user's choice and timing. **Never nag back to an unfinished thing.** No "you left this half done", no resumption prompts, no pressure to finish before starting something else. Flexibility in when to resume independently improves performance; removing the choice removes the benefit.
 
 ### Repair
-Nudge back when Caddie is ahead of you. Voice when it's behind. Chain shown after the fact, framed as what you did.
+Nudge back when GYST is ahead of you. Voice when it's behind. Chain shown after the fact, framed as what you did.
 
 ### Reflect
 The reflection is a record of **mastery experiences** — the material self-efficacy is built from. Not kindness, and not merely evidence of movement. Looking back at what was done is delivery; anything pointing forward is anticipation.
@@ -211,7 +211,7 @@ Each thing carries a coarse `domain` assigned by the LLM at extraction (home / a
 
 Used **only** for spread variety — avoid two items from the same domain when alternatives exist. It must be selected in the offer query and passed through to the spread logic. It never appears in the UI, and **must never become browsable**: a browsable domain tag becomes a pile, and showing the pile is the injury the whole design exists to avoid.
 
-Rationale: self-efficacy is domain-specific. Without this, Caddie optimises for easy wins in one corner while the area you feel worst about stays untouched and un-improved.
+Rationale: self-efficacy is domain-specific. Without this, GYST optimises for easy wins in one corner while the area you feel worst about stays untouched and un-improved.
 
 ---
 
@@ -219,7 +219,7 @@ Rationale: self-efficacy is domain-specific. Without this, Caddie optimises for 
 
 Wanted things belong in the pool. Behavioural activation evidence (26 RCTs, SMD −0.74) supports scheduling activities you'd actually want to do; the mechanism is the same as delivery density — contact with environmental reinforcement.
 
-The pool is currently all duty. That matters most when motivation is lowest, which is exactly when Caddie needs to be easiest to use.
+The pool is currently all duty. That matters most when motivation is lowest, which is exactly when GYST needs to be easiest to use.
 
 Whether this needs schema changes is open. A project with no obligation attached is already a project. Confirm by use before touching the schema.
 
@@ -238,13 +238,13 @@ Focus (declared, scoped to a fixed set of thing IDs). Band self-calibration — 
 
 **v2 — pattern-based behaviours.** All read the events tables; none asks anything.
 
-*Governing rule: patterns silently change what Caddie offers, and are never shown back as insight about the user.* A screen reporting completion rates is a percentage, a judgement and self-surveillance. Nothing should ever be phrased as Caddie having noticed something about you.
+*Governing rule: patterns silently change what GYST offers, and are never shown back as insight about the user.* A screen reporting completion rates is a percentage, a judgement and self-surveillance. Nothing should ever be phrased as GYST having noticed something about you.
 
 - **Buying cluster** — when several unrelated things all sit on an "order X" step, offer them as one sitting. Highest leverage item in v2: it unblocks several chains at once and collapses Steel's delay term across all of them.
 - **Stuck-step breakdown** — accepted three times, never done, means the step is too big. Offer to break it down rather than waiting to be asked.
 - **Never-accepted park** — offered repeatedly, accepted never. **Offer to park it; never suppress silently.** Phrase about the thing, not the person: "still want this on the list?", never "this keeps coming up and never lands." Ask once; if declined, don't ask again.
 - **Learned spread weighting** — if accepted shapes cluster by time of day, weight the spread accordingly.
-- **Habit stacking, recurring care only.** "After [existing habit], I will [care action]" is an implementation intention with a focal cue. Caddie detects *times*, not habits — so it must ask ("you usually do these Sunday mornings — is there something you already do then this could ride on?") and never suggest an anchor, because a wrong anchor is a confidently-wrong fact. Offer once; if declined, never again. **Once stacked, stop offering it** — habit stacking is the *exit route from the offer pool*, freeing the slot for things that can't be automated. Resume quietly if it doesn't take (Lally's range is 18–254 days), and say nothing about consistency.
+- **Habit stacking, recurring care only.** "After [existing habit], I will [care action]" is an implementation intention with a focal cue. GYST detects *times*, not habits — so it must ask ("you usually do these Sunday mornings — is there something you already do then this could ride on?") and never suggest an anchor, because a wrong anchor is a confidently-wrong fact. Offer once; if declined, never again. **Once stacked, stop offering it** — habit stacking is the *exit route from the offer pool*, freeing the slot for things that can't be automated. Resume quietly if it doesn't take (Lally's range is 18–254 days), and say nothing about consistency.
 
 **Explicitly dropped from v2:** offering a second thing immediately after a completion. Tempting, but it's the licensing scenario engineered — a completed sub-goal is treated as a substitute for further effort. Also dropped: anything predicting mood or state; any dashboard, streak, heatmap or consistency commentary.
 
@@ -254,7 +254,7 @@ Focus (declared, scoped to a fixed set of thing IDs). Band self-calibration — 
 
 *(v1.5)*
 
-Sometimes the user wants to concentrate on one area — decorating a room, getting the car admin sorted. This is the user supplying the judgement and Caddie executing it, which is the right side of the autonomy evidence. A focus Caddie *inferred* would not be — and would be useless anyway, since shielding is moderated by commitment.
+Sometimes the user wants to concentrate on one area — decorating a room, getting the car admin sorted. This is the user supplying the judgement and GYST executing it, which is the right side of the autonomy evidence. A focus GYST *inferred* would not be — and would be useless anyway, since shielding is moderated by commitment.
 
 **Declaring.** Same sentence router as capture. "I want to focus on the back bedroom." Dropping it is the same. No settings screen, no picker. A persistent indicator that a focus is active is required, or the user won't know why offers narrowed.
 
@@ -268,7 +268,7 @@ Sometimes the user wants to concentrate on one area — decorating a room, getti
 - **Facilitative exception:** a buying cluster may include items outside the focus if at least one item is inside it. Every other apparently-facilitative case is either already in the focus set or genuinely irrelevant. (Inhibition of alternatives is lessened when the alternative facilitates the focal goal.)
 - **Fallback must be stated, never silent.** "Nothing startable in the back bedroom" — then offer from the wider pool. Silent reversion loses the user's grip on whether the focus is still on.
 - **Revocable at zero cost.** No duration, no end date, no stored record of having dropped one. The moment a focus is something you can fail at, it's a self-imposed commitment device — and those don't replicate.
-- Overrides the domain-variety default. Caddie shouldn't concentrate in one domain by itself; the user may. Since efficacy is domain-specific, deliberate concentration is the faster route to building it there.
+- Overrides the domain-variety default. GYST shouldn't concentrate in one domain by itself; the user may. Since efficacy is domain-specific, deliberate concentration is the faster route to building it there.
 
 ---
 
@@ -324,7 +324,7 @@ Checks every future feature must pass. These are the constraints most likely to 
 
 The earlier design hid the step name to avoid friction at the moment of starting. Right instinct, wrong target — the friction was a step that might be *wrong*, and the accept-question handles that at a better moment, after commitment rather than before.
 
-**"What do you fancy?" not "Pick something to start."** The offer is not a menu. Framing it as a pick recreates the paralysis Caddie exists to dissolve. Caddie has already done the selecting; the user only decides whether to start.
+**"What do you fancy?" not "Pick something to start."** The offer is not a menu. Framing it as a pick recreates the paralysis GYST exists to dissolve. GYST has already done the selecting; the user only decides whether to start.
 
 **Focus screen.** Once committed, the thing name shrinks to a label and the step name becomes the headline. The question is no longer *what am I doing* but *what am I doing now*.
 
@@ -349,7 +349,7 @@ A **small API with several clients**, not a web app with features. Voice forces 
 - Offline capture queued and synced — cheap now, painful retrofitted
 - Stable API contract before clients multiply
 
-**Voice into the house is unresolved.** Google shut down Conversational Actions in 2023; whether anything replaces it for custom actions needs checking. Routing through Home Assistant's assistant to a Caddie endpoint is likely shorter, and would give the household display for free.
+**Voice into the house is unresolved.** Google shut down Conversational Actions in 2023; whether anything replaces it for custom actions needs checking. Routing through Home Assistant's assistant to a GYST endpoint is likely shorter, and would give the household display for free.
 
 ---
 
@@ -430,14 +430,14 @@ Previous note on the recurring case (stale since migration 009) is now resolved:
 
 ## Honest position
 
-Everything Caddie **refuses to do** rests on solid ground. Everything it **does** rests on moderate ground or on a five-round test with one person. The offer — two or three live steps of deliberately different shapes, reasons attached — is the thing at the centre, and it is unevidenced by anyone.
+Everything GYST **refuses to do** rests on solid ground. Everything it **does** rests on moderate ground or on a five-round test with one person. The offer — two or three live steps of deliberately different shapes, reasons attached — is the thing at the centre, and it is unevidenced by anyone.
 
-That's defensible for a v1 built for its author. It would not be defensible for a product sold as evidence-based. Worth remembering if Caddie ever leaves the house.
+That's defensible for a v1 built for its author. It would not be defensible for a product sold as evidence-based. Worth remembering if GYST ever leaves the house.
 
-**The one honest positive claim:** Caddie cannot train the brain. What it can do is produce repeated small successes, which raise domain-specific self-efficacy, which is the expectancy term in Steel's equation, which makes the next thing easier to start. That's a genuine compounding loop, and it's fragile in exactly one place — early failures cost more than later ones. Protect the first few weeks.
+**The one honest positive claim:** GYST cannot train the brain. What it can do is produce repeated small successes, which raise domain-specific self-efficacy, which is the expectancy term in Steel's equation, which makes the next thing easier to start. That's a genuine compounding loop, and it's fragile in exactly one place — early failures cost more than later ones. Protect the first few weeks.
 
 ---
 
 ## References
 
-See `caddie-references.md` for the full annotated list: what each source found, what it supports, and how much weight it bears. Entries marked *(verify)* there came through search snippets without complete bibliographic detail and should be checked before being quoted outside this project.
+See `GYST-references.md` for the full annotated list: what each source found, what it supports, and how much weight it bears. Entries marked *(verify)* there came through search snippets without complete bibliographic detail and should be checked before being quoted outside this project.

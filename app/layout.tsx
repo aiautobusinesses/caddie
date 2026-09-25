@@ -16,13 +16,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Caddie",
-  description: "Your life admin caddie",
+  title: "GYST",
+  description: "Get Your Stuff Together",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Caddie",
+    title: "GYST",
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",

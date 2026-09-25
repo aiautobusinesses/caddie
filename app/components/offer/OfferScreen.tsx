@@ -7,7 +7,7 @@
  *    when the reason is a real stored fact (due_date), never a manufacture.
  *  - No progress bars, percentages or steps-remaining counts.
  *  - "What do you fancy?" not "Pick something to start" — the offer is not a menu.
- *    Caddie has already selected; the user only decides whether to start.
+ *    GYST has already selected; the user only decides whether to start.
  *  - Empty state: "Nothing needs doing right now." Factual, not reassuring.
  */
 "use client"

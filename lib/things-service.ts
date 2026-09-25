@@ -196,12 +196,12 @@ export type NudgeDirection = "back" | "forward"
  * next undone step).
  *
  * Nudge back:
- *   "Caddie is ahead of me" — the user hasn't done the current step yet.
+ *   "GYST is ahead of me" — the user hasn't done the current step yet.
  *   Moves live_step_id to the nearest previous step and re-opens it (done=false).
  *   Writes a nudged_back event against the old step.
  *
  * Nudge forward:
- *   "I already did that" — the user completed one or more steps outside Caddie.
+ *   "I already did that" — the user completed one or more steps outside GYST.
  *   Marks the current step done, marks every undone step between current and the
  *   target done (steps the user implicitly skipped), then moves live_step_id to
  *   the nearest undone step ahead.  Writes a nudged_forward event against the

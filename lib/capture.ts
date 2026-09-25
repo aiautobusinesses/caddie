@@ -1,6 +1,6 @@
 import type { LifeWalkExtractedThing } from "@/lib/tasks"
 
-export const TASKS_UPDATED_EVENT = "caddie:tasks-updated"
+export const TASKS_UPDATED_EVENT = "gyst:tasks-updated"
 
 export function notifyTasksUpdated() {
   window.dispatchEvent(new CustomEvent(TASKS_UPDATED_EVENT))

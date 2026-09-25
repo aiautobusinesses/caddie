@@ -35,9 +35,9 @@ export type InProgressThing = {
   step_id: string
   step_name: string
   started_at: string
-  /** True when there is a step with lower step_order (user can say Caddie is ahead). */
+  /** True when there is a step with lower step_order (user can say GYST is ahead). */
   can_nudge_back: boolean
-  /** True when there is an undone step with higher step_order (user can say Caddie is behind). */
+  /** True when there is an undone step with higher step_order (user can say GYST is behind). */
   can_nudge_forward: boolean
 }
 
@@ -117,7 +117,7 @@ export function isEarlyPhase(completionCount: number): boolean {
  *    any urgency attached to them is spurious and triggers the mere urgency effect.
  *  - NEVER invent a fact to justify an offer. Reasons must be "always true".
  *    Concrete: "MOT's due in 12 days", never "due soon".
- *  - Reasons are specific when Caddie knows, null when it doesn't.
+ *  - Reasons are specific when GYST knows, null when it doesn't.
  *    A null reason is a first-class value, not a fallback to paper over.
  *
  * Rules:

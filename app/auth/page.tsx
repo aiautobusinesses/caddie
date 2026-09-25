@@ -123,7 +123,7 @@ export default function AuthPage() {
       <div className="flex flex-col items-center justify-center min-h-dvh px-6">
         <div className="w-full max-w-sm flex flex-col items-center">
           <p className="text-xs uppercase tracking-widest text-muted mb-2">
-            Caddie
+            GYST
           </p>
 
           <div className="w-20 h-20 rounded-2xl bg-surface border border-border flex items-center justify-center mb-6">
@@ -195,7 +195,7 @@ export default function AuthPage() {
     <div className="flex flex-col items-center justify-center min-h-dvh px-6">
       <div className="w-full max-w-sm">
         <p className="text-xs uppercase tracking-widest text-muted mb-2 text-center">
-          Caddie
+          GYST
         </p>
         <h1 className="text-2xl font-semibold text-fg text-center mb-2">
           Sign in
