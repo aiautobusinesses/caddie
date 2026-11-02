@@ -26,18 +26,18 @@ export default function FamiliarityScreen({ item, onYes, onNo }: Props) {
         </p>
       </div>
 
-      <div className="flex-none px-6 pb-6 flex flex-col gap-2">
+      <div className="flex-none px-6 pb-6 flex flex-col gap-2.5">
         <button
           type="button"
           onClick={onYes}
-          className="text-left bg-fg text-bg rounded-[14px] px-5 py-[17px] text-md font-bold hover:bg-white transition-colors"
+          className="text-left bg-fg text-bg rounded-xl px-5 py-4 text-base font-semibold hover:bg-white transition-all active:scale-[0.99]"
         >
           Yes, let&rsquo;s go
         </button>
         <button
           type="button"
           onClick={onNo}
-          className="text-left border border-border rounded-[14px] px-5 py-[15px] text-base font-bold text-subtle hover:border-fg hover:text-fg transition-colors"
+          className="text-left border border-border rounded-xl px-5 py-3.5 text-sm font-semibold text-subtle hover:border-fg hover:text-fg transition-all active:scale-[0.99]"
         >
           No, add a look-up step
         </button>

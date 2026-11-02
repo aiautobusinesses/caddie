@@ -7,18 +7,23 @@ function makeSupabase(overrides: {
   profile?: { data: unknown; error: null }
   doneEvents?: { data: unknown; error: null }
   nudgedBackEvents?: { data: unknown; error: null }
+  stopEvents?: { data: unknown; error: null }
 } = {}) {
   const things = overrides.things ?? { data: [], error: null }
   const carePlans = overrides.carePlans ?? { data: [], error: null }
   const profile = overrides.profile ?? { data: null, error: null }
   const doneEvents = overrides.doneEvents ?? { data: [], error: null }
   const nudgedBackEvents = overrides.nudgedBackEvents ?? { data: [], error: null }
+  const stopEvents = overrides.stopEvents ?? { data: [], error: null }
 
   const buildChain = (result: unknown) => {
     const chain: Record<string, unknown> = {}
     chain.select = vi.fn(() => chain)
     chain.eq = vi.fn(() => chain)
+    chain.in = vi.fn(() => chain)
     chain.is = vi.fn(() => chain)
+    chain.order = vi.fn(() => chain)
+    chain.limit = vi.fn(() => Promise.resolve(result))
     chain.single = vi.fn(() => Promise.resolve(result))
     chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve)
     return chain
@@ -31,7 +36,8 @@ function makeSupabase(overrides: {
     if (callCount === 2) return buildChain(carePlans)
     if (callCount === 3) return buildChain(profile)
     if (callCount === 4) return buildChain(doneEvents)
-    return buildChain(nudgedBackEvents)
+    if (callCount === 5) return buildChain(nudgedBackEvents)
+    return buildChain(stopEvents)
   })
 
   return { from: fromImpl } as unknown as Parameters<typeof loadOfferData>[0]
@@ -143,5 +149,24 @@ describe("loadOfferData", () => {
     // nudgeBackCounts["t1"] = 1, which is below NUDGE_BACK_THRESHOLD (3)
     // so the step name should be specific, not generic
     expect(result.offer[0].step_name).toBe("Step")
+  })
+
+  it("surfaces last_stop_note on in-progress thing when available", async () => {
+    const inProgressThing = {
+      id: "t1", name: "Paint woodwork", class: "project", domain: "home", due_date: null,
+      notify_window: null, live_step_id: "s1", started_at: "2024-02-01T10:00:00.000Z",
+      steps: [{ id: "s1", name: "Sand frame", band: "sitting", mode: "doing", shape: "bleeds", needs_know_how: false, step_order: 0, done: false }],
+    }
+    const stopNoteEvent = {
+      metadata: { note: "Sanded first half, need more 120-grit" },
+      created_at: "2024-02-01T09:00:00.000Z",
+    }
+    const supabase = makeSupabase({
+      things: { data: [inProgressThing], error: null },
+      stopEvents: { data: [stopNoteEvent], error: null },
+    })
+    const { result } = await loadOfferData(supabase, "u1")
+    expect(result.inProgress).not.toBeNull()
+    expect(result.inProgress?.last_stop_note).toBe("Sanded first half, need more 120-grit")
   })
 })

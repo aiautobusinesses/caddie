@@ -10,6 +10,7 @@ type Stage = "input" | "processing" | "review"
 type Props = {
   onClose: () => void
   onSaved: () => void
+  onSwitchToTask?: () => void
 }
 
 /**
@@ -23,7 +24,7 @@ type Props = {
  * were inserted server-side). The review screen lets users adjust via
  * the edit route if they want to change anything.
  */
-export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
+export default function EntityCaptureFlow({ onClose, onSaved, onSwitchToTask }: Props) {
   const [stage, setStage] = useState<Stage>("input")
   const [sentence, setSentence] = useState("")
   const [seeded, setSeeded] = useState<SeedResponse | null>(null)
@@ -100,6 +101,18 @@ export default function EntityCaptureFlow({ onClose, onSaved }: Props) {
           >
             Set up a care plan
           </button>
+
+          {onSwitchToTask && (
+            <div className="mt-4 pt-3 border-t border-border text-center">
+              <button
+                type="button"
+                onClick={onSwitchToTask}
+                className="text-xs font-semibold text-muted hover:text-fg transition-colors"
+              >
+                ← Back to standard capture
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )

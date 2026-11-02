@@ -39,6 +39,9 @@ export type InProgressThing = {
   can_nudge_back: boolean
   /** True when there is an undone step with higher step_order (user can say GYST is behind). */
   can_nudge_forward: boolean
+  last_stop_note?: string | null
+  last_stop_photo_url?: string | null
+  last_stopped_at?: string | null
 }
 
 export type OfferStepRow = {
@@ -71,6 +74,7 @@ export type OfferComputationInput = {
   lastCareOfferDate: string | null
   completionCount: number
   nudgeBackCounts: Record<string, number>
+  lastStopNote?: { note: string | null; photo_url: string | null; stopped_at: string | null } | null
 }
 
 export type OfferComputationResult = {
@@ -213,7 +217,10 @@ function pickWithSpread(items: OfferThingRow[]): OfferThingRow[] {
   return picked.slice(0, 3)
 }
 
-function buildInProgressThing(things: OfferThingRow[]): InProgressThing | null {
+function buildInProgressThing(
+  things: OfferThingRow[],
+  lastStopNote?: { note: string | null; photo_url: string | null; stopped_at: string | null } | null,
+): InProgressThing | null {
   const inProgress = things.find((thing) => thing.started_at != null)
   if (!inProgress) return null
 
@@ -236,6 +243,9 @@ function buildInProgressThing(things: OfferThingRow[]): InProgressThing | null {
     started_at: inProgress.started_at as string,
     can_nudge_back,
     can_nudge_forward,
+    last_stop_note: lastStopNote?.note ?? null,
+    last_stop_photo_url: lastStopNote?.photo_url ?? null,
+    last_stopped_at: lastStopNote?.stopped_at ?? null,
   }
 }
 
@@ -260,10 +270,10 @@ function mapCareGroup(group: ReturnType<typeof buildCareGroup>): CareGroupOffer 
 // ---------------------------------------------------------------------------
 
 export function computeOffer(input: OfferComputationInput): OfferComputationResult {
-  const { today, things, carePlans, lastCareOfferDate, completionCount, nudgeBackCounts } = input
+  const { today, things, carePlans, lastCareOfferDate, completionCount, nudgeBackCounts, lastStopNote } = input
   const earlyPhase = isEarlyPhase(completionCount)
 
-  const inProgress = buildInProgressThing(things)
+  const inProgress = buildInProgressThing(things, lastStopNote)
   if (inProgress) {
     return { inProgress, offer: [], careGroup: null }
   }

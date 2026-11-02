@@ -190,24 +190,35 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
    * The `stopped` event was already written server-side by markThingStillGoing,
    * so this is a distinct annotation record — not a second session marker.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function handleStopNote(note: string | null, _photoFile: File | null) {
+  async function handleStopNote(note: string | null, photoFile: File | null) {
     const stepId = stopNoteStepId
     setStopNoteStepId(null)
 
-    // TODO: photo upload not yet implemented. The design relies on the photo as an
-    // environmental position marker (strongest resumption cue). Implement by uploading
-    // _photoFile to Supabase Storage and storing the resulting URL in metadata.
-    // Until then, the photo is silently dropped — a local File.name is meaningless
-    // once the session ends and must not be recorded as if it were a usable cue.
+    let photoUrl: string | null = null
+    if (photoFile) {
+      try {
+        photoUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(photoFile)
+        })
+      } catch {
+        // Fall back to no photo if reading fails
+      }
+    }
+
     const hasNote = note && note.length > 0
-    if (hasNote && stepId) {
+    if ((hasNote || photoUrl) && stepId) {
       void fetch(`/api/steps/${stepId}/event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           event_type: "stop_note",
-          metadata: { note },
+          metadata: {
+            note: note || null,
+            photo_url: photoUrl,
+          },
         }),
       })
     }

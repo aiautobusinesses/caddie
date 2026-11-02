@@ -105,7 +105,7 @@ describe("parseLifeWalkResultFromModelText", () => {
   it("throws when both arrays are empty after normalisation", () => {
     expect(() =>
       parseLifeWalkResultFromModelText(JSON.stringify({ things: [], entities: [] })),
-    ).toThrow("No valid things in model response")
+    ).toThrow("Nothing concrete found in narration")
   })
 
   it("throws when the model returns a plain array instead of an object", () => {
@@ -198,11 +198,11 @@ describe("extractFromNarration", () => {
     )
   })
 
-  it("throws a user-friendly message when model returns empty payload (isParseError via 'No valid things')", async () => {
+  it("throws EmptyExtractionError when model returns empty payload", async () => {
     const create = await getMockCreate()
     create.mockResolvedValue({ content: [{ type: "text", text: JSON.stringify({ things: [], entities: [] }) }] })
     await expect(extractFromNarration(await makeMockClient(), "do stuff")).rejects.toThrow(
-      "Could not parse your narration",
+      "Nothing concrete found in narration",
     )
   })
 

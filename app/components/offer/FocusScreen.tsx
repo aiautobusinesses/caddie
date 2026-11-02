@@ -78,39 +78,60 @@ export default function FocusScreen({
         )}
       </div>
 
-      <div className="flex-1 px-6 py-5 flex flex-col justify-center min-h-0 overflow-hidden">
-        <p className="text-5xl font-bold leading-[1.02] tracking-[-0.03em] text-fg text-pretty">
+      <div className="flex-1 px-6 py-5 flex flex-col justify-center min-h-0 overflow-y-auto">
+        <p className="text-4xl sm:text-5xl font-bold leading-[1.04] tracking-[-0.03em] text-fg text-pretty">
           {inProgress.step_name ?? inProgress.thing_name ?? ""}
         </p>
-        <p className="mt-3.5 text-sm text-muted">
+        <p className="mt-3 text-sm text-muted">
           {justStarted ? "just started" : "picked up where you left off"}
         </p>
+
+        {(inProgress.last_stop_note || inProgress.last_stop_photo_url) && (
+          <div className="mt-5 bg-surface border border-border rounded-2xl p-4 text-left">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted mb-1.5">
+              Where you got to
+            </p>
+            {inProgress.last_stop_note && (
+              <p className="text-sm text-fg leading-relaxed">
+                {inProgress.last_stop_note}
+              </p>
+            )}
+            {inProgress.last_stop_photo_url && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={inProgress.last_stop_photo_url}
+                alt="Where you got to"
+                className="mt-3 rounded-xl max-h-48 w-auto object-cover border border-border"
+              />
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex-none px-6 pb-6 flex flex-col gap-2">
+      <div className="flex-none px-6 pb-6 flex flex-col gap-2.5">
         {actionError && <p className="text-sm text-red-400 mb-2">{actionError}</p>}
         <button
           type="button"
           onClick={() => onDone(false)}
-          className="text-left bg-fg text-bg rounded-[14px] px-5 py-[17px] text-md font-bold hover:bg-white transition-colors"
+          className="text-left bg-fg text-bg rounded-xl px-5 py-4 text-base font-semibold hover:bg-white transition-all active:scale-[0.99]"
         >
           Done
         </button>
         <button
           type="button"
           onClick={() => onDone(true)}
-          className="text-left border border-border rounded-[14px] px-5 py-[15px] text-base font-bold text-subtle hover:border-fg hover:text-fg transition-colors"
+          className="text-left border border-border rounded-xl px-5 py-3.5 text-sm font-semibold text-subtle hover:border-fg hover:text-fg transition-all active:scale-[0.99]"
         >
           Still going
         </button>
         {(inProgress.can_nudge_back || inProgress.can_nudge_forward) && (
-          <div className="flex gap-2 mt-1">
+          <div className="flex items-center gap-3 mt-1 px-1">
             {inProgress.can_nudge_back && (
               <button
                 type="button"
                 onClick={() => onNudge("back")}
                 disabled={nudging}
-                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-left text-xs font-semibold text-muted hover:text-fg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {nudging ? "…" : "← Step back"}
               </button>
@@ -120,7 +141,7 @@ export default function FocusScreen({
                 type="button"
                 onClick={() => onNudge("forward")}
                 disabled={nudging}
-                className="text-left text-[12px] font-bold text-dim hover:text-muted transition-colors px-1 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-left text-xs font-semibold text-muted hover:text-fg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {nudging ? "…" : "Step forward →"}
               </button>

@@ -77,6 +77,36 @@ export async function loadOfferData(
     nudgeBackCounts[event.thing_id] = (nudgeBackCounts[event.thing_id] ?? 0) + 1
   }
 
+  // If there's an in-progress thing, look up its most recent stop note / cue
+  let lastStopNote: { note: string | null; photo_url: string | null; stopped_at: string | null } | null = null
+  const inProgressThing = (things ?? []).find((t) => t.started_at != null && t.live_step_id != null)
+  if (inProgressThing?.live_step_id) {
+    const { data: stopEvents } = await supabase
+      .from("step_events")
+      .select("metadata, created_at")
+      .eq("step_id", inProgressThing.live_step_id)
+      .eq("user_id", userId)
+      .in("event_type", ["stop_note", "stopped"])
+      .order("created_at", { ascending: false })
+      .limit(5)
+
+    if (stopEvents && stopEvents.length > 0) {
+      const withContent = stopEvents.find((e) => {
+        if (!e.metadata || typeof e.metadata !== "object" || Array.isArray(e.metadata)) return false
+        const meta = e.metadata as Record<string, unknown>
+        return typeof meta.note === "string" || typeof meta.photo_url === "string"
+      })
+      if (withContent) {
+        const meta = withContent.metadata as Record<string, unknown>
+        lastStopNote = {
+          note: typeof meta.note === "string" ? meta.note : null,
+          photo_url: typeof meta.photo_url === "string" ? meta.photo_url : null,
+          stopped_at: withContent.created_at,
+        }
+      }
+    }
+  }
+
   const result = computeOffer({
     today,
     things: (things ?? []) as unknown as OfferThingRow[],
@@ -85,6 +115,7 @@ export async function loadOfferData(
       (profileData as { last_care_offer_date: string | null } | null)?.last_care_offer_date ?? null,
     completionCount,
     nudgeBackCounts,
+    lastStopNote,
   })
 
   return { result, error: null }

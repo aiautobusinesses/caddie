@@ -19,7 +19,7 @@ export default function AddTaskButton() {
     <button
       type="button"
       onClick={openCapture}
-      className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-fg text-bg text-3xl font-light leading-none shadow-lg hover:bg-white transition-colors flex items-center justify-center"
+      className="fixed bottom-20 right-6 z-40 w-14 h-14 rounded-full bg-fg text-bg text-3xl font-light leading-none shadow-xl hover:bg-white transition-all active:scale-95 flex items-center justify-center"
       aria-label="Add tasks"
     >
       +

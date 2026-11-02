@@ -120,7 +120,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
         {screen === "settings" && <SettingsScreen />}
       </div>
 
-      <div className="flex-none flex border-t-2 border-border bg-bg">
+      <div className="flex-none flex border-t border-border bg-bg safe-area-bottom">
         <button
           type="button"
           onClick={() => {
@@ -129,14 +129,14 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
               void refreshOffer()
             }
           }}
-          className={`flex-1 text-left px-5 py-3.5 pb-[22px] text-xs font-bold uppercase tracking-[0.08em] border-r-2 border-border transition-colors hover:bg-surface ${screen !== "settings" ? "text-fg" : "text-muted"}`}
+          className={`flex-1 text-left px-6 py-4 text-xs font-bold uppercase tracking-[0.1em] border-r border-border transition-colors hover:bg-surface ${screen !== "settings" ? "text-fg" : "text-muted hover:text-subtle"}`}
         >
           Now
         </button>
         <button
           type="button"
           onClick={() => setScreen("settings")}
-          className={`flex-1 text-left px-5 py-3.5 pb-[22px] text-xs font-bold uppercase tracking-[0.08em] transition-colors hover:bg-surface ${screen === "settings" ? "text-fg" : "text-muted"}`}
+          className={`flex-1 text-left px-6 py-4 text-xs font-bold uppercase tracking-[0.1em] transition-colors hover:bg-surface ${screen === "settings" ? "text-fg" : "text-muted hover:text-subtle"}`}
         >
           Settings
         </button>

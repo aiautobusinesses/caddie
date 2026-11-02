@@ -14,6 +14,7 @@ type TaskCaptureFlowProps = {
   onClose?: () => void
   /** Back button shown in lifewalk header when entered from settings */
   onBack?: () => void
+  onSwitchToEntity?: () => void
 }
 
 // Normalise the vendor-prefixed SpeechRecognition constructor.
@@ -34,9 +35,11 @@ export default function TaskCaptureFlow({
   onSaved,
   onClose,
   onBack,
+  onSwitchToEntity,
 }: TaskCaptureFlowProps) {
   const [stage, setStage] = useState<Stage>("narrate")
   const [transcript, setTranscript] = useState("")
+  const [interimTranscript, setInterimTranscript] = useState("")
   const [things, setThings] = useState<LifeWalkExtractedThing[]>([])
   const [entitiesDropped, setEntitiesDropped] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -57,17 +60,25 @@ export default function TaskCaptureFlow({
 
     const recognition = new SR()
     recognition.continuous = true
-    recognition.interimResults = false
+    recognition.interimResults = true
     recognition.lang = "en-GB"
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const appended = Array.from<any>(event.results)
-        .slice(event.resultIndex)
-        .map((r) => r[0].transcript)
-        .join(" ")
-      setTranscript((prev) => (prev ? `${prev} ${appended}` : appended))
+      let finalChunk = ""
+      let interimChunk = ""
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i]
+        if (res.isFinal) {
+          finalChunk += res[0].transcript + " "
+        } else {
+          interimChunk += res[0].transcript
+        }
+      }
+      if (finalChunk) {
+        setTranscript((prev) => (prev ? `${prev.trim()} ${finalChunk.trim()}` : finalChunk.trim()))
+      }
+      setInterimTranscript(interimChunk)
     }
 
     recognition.onerror = (event: { error: string }) => {
@@ -145,6 +156,12 @@ export default function TaskCaptureFlow({
     setThings((prev) => prev.filter((_, idx) => idx !== i))
   }
 
+  function renameThing(i: number, newName: string) {
+    setThings((prev) =>
+      prev.map((t, idx) => (idx === i ? { ...t, name: newName } : t)),
+    )
+  }
+
   async function handleSave() {
     setSaving(true)
     setError(null)
@@ -214,34 +231,43 @@ export default function TaskCaptureFlow({
                 type="button"
                 onClick={toggleListening}
                 aria-label={listening ? "Stop recording" : "Start recording"}
-                className={`absolute bottom-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                className={`absolute bottom-3 right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                   listening
-                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                    : "bg-dim/50 text-muted hover:text-fg hover:bg-border"
+                    ? "bg-red-500 text-white shadow-lg ring-4 ring-red-500/30 animate-pulse"
+                    : "bg-dim/60 text-subtle hover:text-fg hover:bg-border"
                 }`}
               >
                 {listening ? (
                   // Stop icon
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
-                    <rect x="2" y="2" width="10" height="10" rx="1.5" />
+                    <rect x="2" y="2" width="10" height="10" rx="2" />
                   </svg>
                 ) : (
                   // Mic icon
-                  <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="4" y="1" width="6" height="10" rx="3" />
-                    <path d="M1 9a6 6 0 0 0 12 0" />
-                    <line x1="7" y1="15" x2="7" y2="17" />
-                    <line x1="4" y1="17" x2="10" y2="17" />
+                  <svg width="16" height="20" viewBox="0 0 16 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="5" y="1" width="6" height="11" rx="3" />
+                    <path d="M2 9a6 6 0 0 0 12 0" />
+                    <line x1="8" y1="16" x2="8" y2="19" />
+                    <line x1="5" y1="19" x2="11" y2="19" />
                   </svg>
                 )}
               </button>
             )}
           </div>
+
           {listening && (
-            <p className="text-xs text-red-400 mt-2 text-center">Listening — tap the mic to stop</p>
+            <div className="mt-3 px-4 py-2.5 bg-red-950/30 border border-red-500/30 rounded-xl flex items-center gap-2.5 text-xs text-red-300">
+              <span className="w-2 h-2 rounded-full bg-red-400 animate-ping flex-none" />
+              <span className="font-medium">Listening...</span>
+              {interimTranscript && (
+                <span className="italic text-subtle truncate flex-1">&ldquo;{interimTranscript}&rdquo;</span>
+              )}
+            </div>
           )}
+
           {hint && <p className="text-sm text-muted mt-3 text-center">{hint}</p>}
           {error && <p className="text-sm text-red-400 mt-3 text-center">{error}</p>}
+
           <button
             type="button"
             onClick={() => void handleSubmit()}
@@ -250,6 +276,18 @@ export default function TaskCaptureFlow({
           >
             Let GYST sort this out
           </button>
+
+          {!isOnboarding && onSwitchToEntity && (
+            <div className="mt-4 pt-3 border-t border-border text-center">
+              <button
+                type="button"
+                onClick={onSwitchToEntity}
+                className="text-xs font-semibold text-muted hover:text-fg transition-colors"
+              >
+                Adding something with recurring care? Switch to care plan →
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -297,6 +335,7 @@ export default function TaskCaptureFlow({
               key={`${thing.name}-${i}`}
               thing={thing}
               onDelete={() => deleteThing(i)}
+              onRename={(newName) => renameThing(i, newName)}
             />
           ))}
         </div>
