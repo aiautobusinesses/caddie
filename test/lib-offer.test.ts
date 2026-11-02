@@ -73,7 +73,7 @@ const baseInput: OfferComputationInput = {
 describe("computeOffer", () => {
   it("returns empty offer when nothing available", () => {
     const result = computeOffer(baseInput)
-    expect(result).toEqual({ inProgress: null, offer: [], careGroup: null })
+    expect(result).toEqual({ inProgress: null, offer: [], careGroup: null, buyingCluster: null, activeFocus: null })
   })
 
   it("returns in-progress thing and suppresses offer + care group", () => {
@@ -751,5 +751,67 @@ describe("computeOffer — design invariants", () => {
     ]
     const result = computeOffer({ ...baseInput, completionCount: 0, things })
     expect(result.offer.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe("computeOffer — Focus Scoping (v1.5)", () => {
+  it("scopes offers to the focus set when items are startable", () => {
+    const t1 = makeThing({ id: "t1", name: "Back bedroom wall", steps: [makeStep({ id: "s1", name: "Sand wall" })] })
+    const t2 = makeThing({ id: "t2", name: "Back bedroom floor", live_step_id: "s2", steps: [makeStep({ id: "s2", name: "Varnish" })] })
+    const t3 = makeThing({ id: "t3", name: "Kitchen sink", live_step_id: "s3", steps: [makeStep({ id: "s3", name: "Fix trap" })] })
+
+    const result = computeOffer({
+      ...baseInput,
+      things: [t1, t2, t3],
+      activeFocus: { label: "Back bedroom", thing_ids: ["t1", "t2"] },
+    })
+
+    expect(result.activeFocus).toEqual({ label: "Back bedroom", fallback: false })
+    expect(result.offer.map((i) => i.thing_id)).toEqual(expect.arrayContaining(["t1", "t2"]))
+    expect(result.offer.some((i) => i.thing_id === "t3")).toBe(false)
+  })
+
+  it("falls back gracefully and sets fallback:true when focus set has no startable items", () => {
+    const t3 = makeThing({ id: "t3", name: "Kitchen sink", live_step_id: "s3", steps: [makeStep({ id: "s3", name: "Fix trap" })] })
+
+    const result = computeOffer({
+      ...baseInput,
+      things: [t3],
+      activeFocus: { label: "Back bedroom", thing_ids: ["t1", "t2"] },
+    })
+
+    expect(result.activeFocus).toEqual({ label: "Back bedroom", fallback: true })
+    expect(result.offer).toHaveLength(1)
+    expect(result.offer[0].thing_id).toBe("t3")
+  })
+})
+
+describe("computeOffer — Buying Clusters (v2)", () => {
+  it("detects 2 or more buying steps and bundles them into a cluster offer", () => {
+    const t1 = makeThing({ id: "t1", name: "Bath panel", steps: [makeStep({ id: "s1", name: "Order bath panel" })] })
+    const t2 = makeThing({ id: "t2", name: "Woodwork", live_step_id: "s2", steps: [makeStep({ id: "s2", name: "Buy sandpaper and primer" })] })
+    const t3 = makeThing({ id: "t3", name: "Shed door", live_step_id: "s3", steps: [makeStep({ id: "s3", name: "Sand door" })] })
+
+    const result = computeOffer({
+      ...baseInput,
+      things: [t1, t2, t3],
+    })
+
+    expect(result.buyingCluster).not.toBeNull()
+    expect(result.buyingCluster?.items).toHaveLength(2)
+    expect(result.buyingCluster?.items[0].step_name).toBe("Order bath panel")
+    expect(result.buyingCluster?.items[1].step_name).toBe("Buy sandpaper and primer")
+  })
+
+  it("returns null buying cluster when fewer than 2 buying steps exist", () => {
+    const t1 = makeThing({ id: "t1", name: "Bath panel", steps: [makeStep({ id: "s1", name: "Order bath panel" })] })
+    const t2 = makeThing({ id: "t2", name: "Shed door", live_step_id: "s2", steps: [makeStep({ id: "s2", name: "Sand door" })] })
+
+    const result = computeOffer({
+      ...baseInput,
+      things: [t1, t2],
+    })
+
+    expect(result.buyingCluster).toBeNull()
   })
 })

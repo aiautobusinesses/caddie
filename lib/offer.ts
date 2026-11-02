@@ -29,6 +29,20 @@ export type CareGroupOffer = {
   has_overdue: boolean
 }
 
+export type BuyingClusterItem = {
+  thing_id: string
+  thing_name: string
+  step_id: string
+  step_name: string
+}
+
+export type BuyingClusterOffer = {
+  type: "buying_cluster"
+  title: string
+  items: BuyingClusterItem[]
+  reason: string | null
+}
+
 export type InProgressThing = {
   thing_id: string
   thing_name: string
@@ -75,12 +89,15 @@ export type OfferComputationInput = {
   completionCount: number
   nudgeBackCounts: Record<string, number>
   lastStopNote?: { note: string | null; photo_url: string | null; stopped_at: string | null } | null
+  activeFocus?: { label: string; thing_ids: string[] } | null
 }
 
 export type OfferComputationResult = {
   inProgress: InProgressThing | null
   offer: OfferItem[]
   careGroup: CareGroupOffer | null
+  buyingCluster?: BuyingClusterOffer | null
+  activeFocus?: { label: string; fallback: boolean } | null
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +266,39 @@ function buildInProgressThing(
   }
 }
 
+const BUYING_STEP_RE = /^(?:order|buy|purchase|get\s+(?:the\s+)?(?:parts?|materials?|tools?|supplies|paint|screws|kit|filters?|plants?|lumber|timber|sealant)|pick\s+up)\b/i
+
+function isBuyingStep(stepName: string): boolean {
+  return BUYING_STEP_RE.test(stepName.trim())
+}
+
+function detectBuyingCluster(projects: OfferThingRow[]): BuyingClusterOffer | null {
+  const buyingThings: { thing: OfferThingRow; step: OfferStepRow }[] = []
+
+  for (const thing of projects) {
+    const liveStep = thing.steps.find((s) => s.id === thing.live_step_id)
+    if (liveStep && isBuyingStep(liveStep.name)) {
+      buyingThings.push({ thing, step: liveStep })
+    }
+  }
+
+  if (buyingThings.length < 2) return null
+
+  const items: BuyingClusterItem[] = buyingThings.map(({ thing, step }) => ({
+    thing_id: thing.id,
+    thing_name: thing.name,
+    step_id: step.id,
+    step_name: step.name,
+  }))
+
+  return {
+    type: "buying_cluster",
+    title: `Order & buy items (${items.length} projects)`,
+    items,
+    reason: `Unblocks ${items.length} projects in one sitting`,
+  }
+}
+
 function mapCareGroup(group: ReturnType<typeof buildCareGroup>): CareGroupOffer | null {
   if (!group) return null
 
@@ -270,7 +320,7 @@ function mapCareGroup(group: ReturnType<typeof buildCareGroup>): CareGroupOffer 
 // ---------------------------------------------------------------------------
 
 export function computeOffer(input: OfferComputationInput): OfferComputationResult {
-  const { today, things, carePlans, lastCareOfferDate, completionCount, nudgeBackCounts, lastStopNote } = input
+  const { today, things, carePlans, lastCareOfferDate, completionCount, nudgeBackCounts, lastStopNote, activeFocus } = input
   const earlyPhase = isEarlyPhase(completionCount)
 
   const inProgress = buildInProgressThing(things, lastStopNote)
@@ -284,14 +334,9 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
     : null
 
   // A thing is available to offer if it has an active live step.
-  // Things with steps but no live_step_id are mid-transition (e.g. all steps done); excluded.
-  // Things with no steps at all are not actionable and also excluded.
   const available = things.filter((thing) => thing.live_step_id != null)
 
-  // Design constraint: obligations surface ONLY inside their notify_window.
-  // An obligation with no due_date or no notify_window has no defined activation
-  // moment and must not be offered. (Parse-time coercion in normalizeThing ensures
-  // obligation rows always have a due_date; this guard is a safety net.)
+  // Obligations surface ONLY inside their notify_window.
   const obligations = available.filter((thing) => {
     if (thing.class !== "obligation") return false
     if (!thing.due_date || thing.notify_window == null) return false
@@ -299,15 +344,30 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
   })
 
   // Only true projects go into the project pool.
-  // Obligations not in the window above are excluded entirely — not demoted to projects.
   const allProjects = available.filter((thing) => thing.class === "project")
 
+  // Focus Scoping (DESIGN.md §Focus)
+  let focusResult: { label: string; fallback: boolean } | null = null
+  let poolProjects = allProjects
+
+  if (activeFocus && activeFocus.label && activeFocus.thing_ids.length > 0) {
+    const focusedProjects = allProjects.filter((t) => activeFocus.thing_ids.includes(t.id))
+    if (focusedProjects.length > 0) {
+      poolProjects = focusedProjects
+      focusResult = { label: activeFocus.label, fallback: false }
+    } else {
+      // Fallback must be stated, never silent
+      poolProjects = allProjects
+      focusResult = { label: activeFocus.label, fallback: true }
+    }
+  }
+
   const filteredProjects = earlyPhase
-    ? allProjects.filter((thing) => {
+    ? poolProjects.filter((thing) => {
         const liveStep = thing.steps.find((s) => s.id === thing.live_step_id)
         return !(liveStep?.needs_know_how ?? false)
       })
-    : allProjects
+    : poolProjects
 
   // True floor: filtering emptied the pool — fall back to unfiltered.
   // When there were filtered alternatives available (filteredProjects.length > 0) the
@@ -315,7 +375,7 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
   // When there were no alternatives at all (true floor), the user must be able to answer
   // the familiarity question — it's the only route to clearing needs_know_how.
   const usedFloor = earlyPhase && filteredProjects.length === 0
-  const projects = filteredProjects.length > 0 ? filteredProjects : allProjects
+  const projects = filteredProjects.length > 0 ? filteredProjects : poolProjects
 
   // One clock-bearing slot, maximum: obligation wins over care group.
   const hasObligation = obligations.length > 0
@@ -394,9 +454,14 @@ export function computeOffer(input: OfferComputationInput): OfferComputationResu
     } satisfies OfferItem
   })
 
+  // Detect buying clusters across available projects (DESIGN.md §Buying cluster)
+  const buyingCluster = detectBuyingCluster(projects)
+
   return {
     inProgress: null,
     offer,
     careGroup: useCareSlot ? rawCareGroup : null,
+    buyingCluster,
+    activeFocus: focusResult,
   }
 }

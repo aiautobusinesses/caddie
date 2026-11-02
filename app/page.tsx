@@ -31,6 +31,7 @@ export default async function Home() {
       initialOffer={offerState.offer}
       initialInProgress={offerState.inProgress}
       initialCareGroup={offerState.careGroup}
+      initialBuyingCluster={offerState.buyingCluster}
     />
   )
 }

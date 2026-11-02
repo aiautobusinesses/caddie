@@ -12,37 +12,66 @@
  */
 "use client"
 
-import type { OfferItem, CareGroupOffer } from "@/lib/offer"
+import type { OfferItem, CareGroupOffer, BuyingClusterOffer } from "@/lib/offer"
 import CareGroupCard from "@/app/components/CareGroupCard"
+import BuyingClusterCard from "@/app/components/BuyingClusterCard"
 
 type Props = {
   offer: OfferItem[]
   careGroup: CareGroupOffer | null
+  buyingCluster?: BuyingClusterOffer | null
+  activeFocus?: { label: string; fallback: boolean } | null
   actionError: string | null
   onStart: (item: OfferItem) => void
   onSkipAll: () => void
   onCapture: () => void
   onRefresh: () => void
+  onClearFocus?: () => void
 }
 
 export default function OfferScreen({
   offer,
   careGroup,
+  buyingCluster,
+  activeFocus,
   actionError,
   onStart,
   onSkipAll,
   onCapture,
   onRefresh,
+  onClearFocus,
 }: Props) {
   return (
     <>
-      <div className="flex-none px-6 py-5 border-b-2 border-border">
-        <h2 className="text-4xl font-bold leading-[1.04] tracking-[-0.025em] text-fg">
+      <div className="flex-none px-6 py-5 border-b-2 border-border flex items-center justify-between gap-3">
+        <h2 className="text-3xl sm:text-4xl font-bold leading-[1.04] tracking-[-0.025em] text-fg">
           What do you fancy?
         </h2>
+        {activeFocus && (
+          <div className="flex items-center gap-2 bg-surface border border-border px-3 py-1.5 rounded-full text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent flex-none" />
+            <span className="text-fg font-semibold truncate max-w-[120px]">{activeFocus.label}</span>
+            {onClearFocus && (
+              <button
+                type="button"
+                onClick={onClearFocus}
+                className="text-muted hover:text-fg text-sm font-bold pl-0.5 leading-none"
+                aria-label="Clear focus"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {offer.length === 0 && !careGroup ? (
+      {activeFocus?.fallback && (
+        <div className="px-6 py-2.5 bg-surface/50 border-b border-border text-xs text-subtle flex items-center justify-between">
+          <span>Nothing startable in {activeFocus.label} — showing wider pool</span>
+        </div>
+      )}
+
+      {offer.length === 0 && !careGroup && !buyingCluster ? (
         <div className="flex-1 px-6 flex flex-col justify-center">
           <h3 className="text-3xl font-bold leading-[1.06] tracking-[-0.02em] text-fg">
             Nothing needs doing right now.
@@ -69,6 +98,7 @@ export default function OfferScreen({
           <div className="flex flex-col gap-3.5 px-6 py-4">
             {actionError && <p className="text-sm text-red-400">{actionError}</p>}
             {careGroup && <CareGroupCard group={careGroup} onDone={onRefresh} />}
+            {buyingCluster && <BuyingClusterCard cluster={buyingCluster} onDone={onRefresh} />}
             {offer.map((item) => (
               <div
                 key={item.thing_id}

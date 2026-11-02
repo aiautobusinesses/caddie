@@ -1,16 +1,18 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { CareGroupOffer, InProgressThing, OfferItem } from "@/lib/offer"
+import type { CareGroupOffer, InProgressThing, OfferItem, BuyingClusterOffer } from "@/lib/offer"
 import { TASKS_UPDATED_EVENT } from "@/lib/capture"
 import type { OfferCardProps, Screen } from "./types"
 
-export function useOfferCardState({ initialOffer, initialInProgress, initialCareGroup }: OfferCardProps) {
+export function useOfferCardState({ initialOffer, initialInProgress, initialCareGroup, initialBuyingCluster }: OfferCardProps) {
   const [screen, setScreen] = useState<Screen>(initialInProgress ? "focus" : "offer")
   const [offer, setOffer] = useState<OfferItem[]>(initialOffer)
   const [careGroup, setCareGroup] = useState<CareGroupOffer | null>(initialCareGroup)
+  const [buyingCluster, setBuyingCluster] = useState<BuyingClusterOffer | null>(initialBuyingCluster ?? null)
   const [inProgress, setInProgress] = useState<InProgressThing | null>(initialInProgress)
   const [pendingItem, setPendingItem] = useState<OfferItem | null>(null)
+  const [activeFocus, setActiveFocus] = useState<{ label: string; fallback: boolean } | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -29,12 +31,16 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
       if (data.in_progress) {
         setInProgress(data.in_progress)
         setCareGroup(null)
+        setBuyingCluster(null)
+        setActiveFocus(null)
         setJustStarted(false)
         setScreen("focus")
       } else {
         setInProgress(null)
         setOffer(data.offer ?? [])
         setCareGroup((data.care_group as CareGroupOffer | null) ?? null)
+        setBuyingCluster((data.buying_cluster as BuyingClusterOffer | null) ?? null)
+        setActiveFocus(data.active_focus ?? null)
         setScreen("offer")
       }
     } catch (e) {
@@ -303,11 +309,22 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     void refreshOffer()
   }
 
+  async function handleClearFocus() {
+    try {
+      await fetch("/api/focus", { method: "DELETE" })
+      setActiveFocus(null)
+      void refreshOffer()
+    } catch {
+      // non-critical
+    }
+  }
+
   return {
     screen,
     setScreen,
     offer,
     careGroup,
+    buyingCluster,
     inProgress,
     pendingItem,
     refreshing,
@@ -317,6 +334,8 @@ export function useOfferCardState({ initialOffer, initialInProgress, initialCare
     setThingComplete,
     justStarted,
     nudging,
+    activeFocus,
+    handleClearFocus,
     refreshOffer,
     handleStart,
     handleFamiliarityYes,

@@ -8,15 +8,17 @@ import FocusScreen from "./offer/FocusScreen"
 import FamiliarityScreen from "./offer/FamiliarityScreen"
 import StopNoteScreen from "./offer/StopNoteScreen"
 import SettingsScreen from "./offer/SettingsScreen"
+import ReflectScreen from "./offer/ReflectScreen"
 import type { OfferCardProps } from "./offer/types"
 
-export default function OfferCard({ initialOffer, initialInProgress, initialCareGroup }: OfferCardProps) {
+export default function OfferCard({ initialOffer, initialInProgress, initialCareGroup, initialBuyingCluster }: OfferCardProps) {
   const { openCapture } = useCapture()
   const {
     screen,
     setScreen,
     offer,
     careGroup,
+    buyingCluster,
     inProgress,
     pendingItem,
     refreshing,
@@ -26,6 +28,8 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     setThingComplete,
     justStarted,
     nudging,
+    activeFocus,
+    handleClearFocus,
     refreshOffer,
     handleStart,
     handleFamiliarityYes,
@@ -37,7 +41,7 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
     handleSkipAll,
     handleSaveName,
     handleAbandon,
-  } = useOfferCardState({ initialOffer, initialInProgress, initialCareGroup })
+  } = useOfferCardState({ initialOffer, initialInProgress, initialCareGroup, initialBuyingCluster })
 
   if (thingComplete) {
     return (
@@ -81,11 +85,14 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
           <OfferScreen
             offer={offer}
             careGroup={careGroup}
+            buyingCluster={buyingCluster}
+            activeFocus={activeFocus}
             actionError={actionError}
             onStart={(item) => void handleStart(item)}
             onSkipAll={() => void handleSkipAll(offer)}
             onCapture={openCapture}
             onRefresh={() => void refreshOffer()}
+            onClearFocus={() => void handleClearFocus()}
           />
         )}
 
@@ -117,6 +124,8 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
           />
         )}
 
+        {screen === "reflect" && <ReflectScreen />}
+
         {screen === "settings" && <SettingsScreen />}
       </div>
 
@@ -124,19 +133,26 @@ export default function OfferCard({ initialOffer, initialInProgress, initialCare
         <button
           type="button"
           onClick={() => {
-            if (screen !== "offer") {
-              setScreen("offer")
+            if (screen !== "offer" && screen !== "focus") {
+              setScreen(inProgress ? "focus" : "offer")
               void refreshOffer()
             }
           }}
-          className={`flex-1 text-left px-6 py-4 text-xs font-bold uppercase tracking-[0.1em] border-r border-border transition-colors hover:bg-surface ${screen !== "settings" ? "text-fg" : "text-muted hover:text-subtle"}`}
+          className={`flex-1 text-center py-4 text-xs font-bold uppercase tracking-[0.1em] border-r border-border transition-colors hover:bg-surface ${screen === "offer" || screen === "focus" || screen === "familiarity" || screen === "stop_note" ? "text-fg" : "text-muted hover:text-subtle"}`}
         >
           Now
         </button>
         <button
           type="button"
+          onClick={() => setScreen("reflect")}
+          className={`flex-1 text-center py-4 text-xs font-bold uppercase tracking-[0.1em] border-r border-border transition-colors hover:bg-surface ${screen === "reflect" ? "text-fg" : "text-muted hover:text-subtle"}`}
+        >
+          Done
+        </button>
+        <button
+          type="button"
           onClick={() => setScreen("settings")}
-          className={`flex-1 text-left px-6 py-4 text-xs font-bold uppercase tracking-[0.1em] transition-colors hover:bg-surface ${screen === "settings" ? "text-fg" : "text-muted hover:text-subtle"}`}
+          className={`flex-1 text-center py-4 text-xs font-bold uppercase tracking-[0.1em] transition-colors hover:bg-surface ${screen === "settings" ? "text-fg" : "text-muted hover:text-subtle"}`}
         >
           Settings
         </button>

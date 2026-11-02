@@ -53,7 +53,7 @@ export async function loadOfferData(
       // inefficiency of fetching those rows and discarding them.
     supabase
       .from("profiles")
-      .select("last_care_offer_date")
+      .select("last_care_offer_date, active_focus")
       .eq("id", userId)
       .single(),
     supabase
@@ -107,6 +107,17 @@ export async function loadOfferData(
     }
   }
 
+  // Parse active_focus if stored on profile
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawFocus = (profileData as any)?.active_focus
+  let activeFocus: { label: string; thing_ids: string[] } | null = null
+  if (rawFocus && typeof rawFocus === "object" && typeof rawFocus.label === "string" && Array.isArray(rawFocus.thing_ids)) {
+    activeFocus = {
+      label: rawFocus.label,
+      thing_ids: rawFocus.thing_ids,
+    }
+  }
+
   const result = computeOffer({
     today,
     things: (things ?? []) as unknown as OfferThingRow[],
@@ -116,6 +127,7 @@ export async function loadOfferData(
     completionCount,
     nudgeBackCounts,
     lastStopNote,
+    activeFocus,
   })
 
   return { result, error: null }

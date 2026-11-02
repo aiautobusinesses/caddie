@@ -46,5 +46,7 @@ export async function GET() {
     in_progress: offerState.inProgress,
     offer: offerState.offer,
     care_group: offerState.careGroup,
+    buying_cluster: offerState.buyingCluster ?? null,
+    active_focus: offerState.activeFocus ?? null,
   })
 }
