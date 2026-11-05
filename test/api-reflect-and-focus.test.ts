@@ -8,6 +8,16 @@ vi.mock("@/lib/api/session", () => ({
   getAuthenticatedContext: vi.fn(),
 }))
 
+import type { AuthenticatedContext } from "@/lib/api/session"
+
+function fakeAuth(supabase: unknown): AuthenticatedContext {
+  return {
+    supabase: supabase as AuthenticatedContext["supabase"],
+    user: { id: "u1" } as AuthenticatedContext["user"],
+    profile: null,
+    getProfile: async () => null,
+  }
+}
 function jsonReq(url: string, body?: unknown, method = "GET"): NextRequest {
   return new NextRequest(url, {
     method,
@@ -42,10 +52,7 @@ describe("GET /api/reflect", () => {
       })),
     }
 
-    vi.mocked(getAuthenticatedContext).mockResolvedValue({
-      supabase: mockSupabase as any,
-      user: { id: "u1" } as any,
-    })
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth(mockSupabase))
 
     const res = await getReflect()
     expect(res.status).toBe(200)
@@ -73,10 +80,7 @@ describe("/api/focus", () => {
       })),
     }
 
-    vi.mocked(getAuthenticatedContext).mockResolvedValue({
-      supabase: mockSupabase as any,
-      user: { id: "u1" } as any,
-    })
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth(mockSupabase))
 
     const res = await getFocus()
     expect(res.status).toBe(200)
@@ -101,10 +105,7 @@ describe("/api/focus", () => {
       })),
     }
 
-    vi.mocked(getAuthenticatedContext).mockResolvedValue({
-      supabase: mockSupabase as any,
-      user: { id: "u1" } as any,
-    })
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth(mockSupabase))
 
     const res = await postFocus(jsonReq("http://localhost/api/focus", { query: "garage" }, "POST"))
     expect(res.status).toBe(200)
@@ -123,10 +124,7 @@ describe("/api/focus", () => {
       })),
     }
 
-    vi.mocked(getAuthenticatedContext).mockResolvedValue({
-      supabase: mockSupabase as any,
-      user: { id: "u1" } as any,
-    })
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth(mockSupabase))
 
     const res = await deleteFocus()
     expect(res.status).toBe(200)

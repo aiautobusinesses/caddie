@@ -774,6 +774,46 @@ describe("GET /auth/confirm", async () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// /api/auth/verify-otp (POST)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/auth/verify-otp", async () => {
+  const { POST } = await import("@/app/api/auth/verify-otp/route")
+
+  beforeEach(() => {
+    vi.mocked(acceptInvite).mockReset()
+  })
+
+  it("returns 400 when email or code is missing", async () => {
+    const res = await POST(jsonReq("http://localhost", { email: "a@b.com" }))
+    expect(res.status).toBe(400)
+  })
+
+  it("returns 401 when the code is invalid", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { verifyOtp: vi.fn(async () => ({ error: { message: "bad" }, data: { session: null } })) },
+    } as unknown as Awaited<ReturnType<typeof createServerClient>>)
+    const res = await POST(jsonReq("http://localhost", { email: "a@b.com", token: "123456" }))
+    expect(res.status).toBe(401)
+  })
+
+  it("verifies the code (whitespace stripped), accepts invite, returns ok", async () => {
+    const fakeUser = { id: "u3", email: "a@b.com" }
+    const verifyOtp = vi.fn(async () => ({ error: null, data: { session: { user: fakeUser } } }))
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { verifyOtp },
+    } as unknown as Awaited<ReturnType<typeof createServerClient>>)
+    vi.mocked(acceptInvite).mockResolvedValue(null)
+
+    const res = await POST(jsonReq("http://localhost", { email: " a@b.com ", token: "123 456" }))
+
+    expect(res.status).toBe(200)
+    expect(verifyOtp).toHaveBeenCalledWith({ email: "a@b.com", token: "123456", type: "email" })
+    expect(vi.mocked(acceptInvite)).toHaveBeenCalledWith(expect.anything(), "u3", "a@b.com")
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Branch coverage — entities
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -965,12 +1005,46 @@ describe("POST /api/ai-key", async () => {
     expect(res.status).toBe(400)
   })
 
-  it("returns 422 when Anthropic key validation fails", async () => {
+  it("returns 422 when Anthropic rejects the key with 401", async () => {
     vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+    const { default: Anthropic } = await import("@anthropic-ai/sdk")
+    const APIError = (Anthropic as unknown as { APIError: new (m: string, s: number) => Error }).APIError
     const modelsList = await getAnthropicModelsList()
-    modelsList.mockRejectedValue(new Error("invalid key"))
+    modelsList.mockRejectedValue(new APIError("invalid x-api-key", 401))
     const res = await POST(jsonReq("http://localhost", { key: "sk-ant-bad" }))
     expect(res.status).toBe(422)
+    const data = await res.json()
+    expect(data.error).toMatch(/rejected/i)
+  })
+
+  it.each([
+    ["a network error", () => new Error("fetch failed")],
+    ["a 500 from Anthropic", (E: new (m: string, s: number) => Error) => new E("overloaded", 500)],
+    ["a 403 from Anthropic", (E: new (m: string, s: number) => Error) => new E("forbidden", 403)],
+  ])("saves the key when validation hits %s", async (_label, makeErr) => {
+    const eqFn = vi.fn(async () => ({ error: null }))
+    const updateFn = vi.fn(() => ({ eq: eqFn }))
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
+      from: vi.fn(() => ({ update: updateFn })),
+    }))
+    const { default: Anthropic } = await import("@anthropic-ai/sdk")
+    const APIError = (Anthropic as unknown as { APIError: new (m: string, s: number) => Error }).APIError
+    const modelsList = await getAnthropicModelsList()
+    modelsList.mockRejectedValue(makeErr(APIError))
+    const res = await POST(jsonReq("http://localhost", { key: "sk-ant-api03-" + "a".repeat(80) }))
+    expect(res.status).toBe(200)
+  })
+
+  it("accepts any key prefix when Anthropic accepts it (no format check)", async () => {
+    const eqFn = vi.fn(async () => ({ error: null }))
+    const updateFn = vi.fn(() => ({ eq: eqFn }))
+    vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth({
+      from: vi.fn(() => ({ update: updateFn })),
+    }))
+    const modelsList = await getAnthropicModelsList()
+    modelsList.mockResolvedValue({})
+    const res = await POST(jsonReq("http://localhost", { key: "sk-ant-usr-short" }))
+    expect(res.status).toBe(200)
   })
 
   it("returns 500 when profile update fails", async () => {

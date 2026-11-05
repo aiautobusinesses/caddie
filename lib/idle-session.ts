@@ -4,8 +4,8 @@ import { useEffect, useRef, useCallback } from "react"
 
 const LAST_ACTIVE_KEY = "gyst:last-active"
 
-/** How long (ms) the app can be idle before triggering a lock. Default: 30 min */
-const DEFAULT_IDLE_MS = 30 * 60 * 1000
+/** How long (ms) the app can be idle before triggering a lock. Default: 7 days */
+const DEFAULT_IDLE_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Touch/click/key events that count as "activity" */
 const ACTIVITY_EVENTS = [
@@ -44,7 +44,7 @@ export function isSessionExpired(idleMs = DEFAULT_IDLE_MS): boolean {
 }
 
 interface UseIdleSessionOptions {
-  /** Milliseconds of inactivity before onExpire fires. Default 30 min. */
+  /** Milliseconds of inactivity before onExpire fires. Default 7 days. */
   idleMs?: number
   /** Called when the idle threshold is crossed. */
   onExpire: () => void

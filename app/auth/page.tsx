@@ -30,6 +30,9 @@ export default function AuthPage() {
   const [emailLoading, setEmailLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
+  const [codeSent, setCodeSent] = useState(false)
+  const [code, setCode] = useState("")
+  const [codeLoading, setCodeLoading] = useState(false)
 
   // Biometric state
   const [bioLoading, setBioLoading] = useState(false)
@@ -112,7 +115,38 @@ export default function AuthPage() {
       return
     }
 
-    setMessage("Check your email for a sign-in link.")
+    setCodeSent(true)
+    setMessage("Check your email. Enter the code below, or tap the link.")
+  }
+
+  // ── Email code sign-in (stays in the current browser / PWA) ───────────────
+  async function handleCodeSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmedCode = code.trim()
+    if (!trimmedCode) return
+
+    setCodeLoading(true)
+    setEmailError(null)
+
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), token: trimmedCode }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null
+        setEmailError(data?.error ?? "Could not verify the code.")
+        return
+      }
+      recordActivity()
+      router.replace("/")
+      router.refresh()
+    } catch {
+      setEmailError("Could not reach the server. Check your connection and try again.")
+    } finally {
+      setCodeLoading(false)
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -225,9 +259,33 @@ export default function AuthPage() {
             disabled={emailLoading || !email.trim()}
             className="w-full bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {emailLoading ? "Sending…" : "Send magic link"}
+            {emailLoading ? "Sending…" : codeSent ? "Resend" : "Send magic link"}
           </button>
         </form>
+
+        {codeSent && (
+          <form
+            onSubmit={(e) => void handleCodeSubmit(e)}
+            className="flex flex-col gap-4 mt-4"
+          >
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Code from the email"
+              className="w-full bg-surface border border-border rounded-3xl px-5 py-4 text-sm text-fg placeholder-dim text-center tracking-widest focus:outline-none focus:border-muted transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={codeLoading || !code.trim()}
+              className="w-full bg-fg text-bg rounded-2xl py-4 text-sm font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              {codeLoading ? "Verifying…" : "Sign in with code"}
+            </button>
+          </form>
+        )}
 
         {isPasskeySupported() && getStoredCredentialId() && (
           <button

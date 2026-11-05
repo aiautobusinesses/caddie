@@ -21,8 +21,8 @@ type OverlayState =
 
 const PASSKEY_OFFERED_KEY = "gyst:passkey-offered"
 
-/** How long (ms) before idle lock kicks in — 30 minutes */
-const IDLE_MS = 30 * 60 * 1000
+/** How long (ms) before idle lock kicks in — 7 days */
+const IDLE_MS = 7 * 24 * 60 * 60 * 1000
 
 interface Props {
   children: React.ReactNode
@@ -63,9 +63,10 @@ export default function SessionGuard({ children }: Props) {
     if (isPasskeySupported() && getStoredCredentialId()) {
       setOverlay("biometric-reauth")
     } else {
-      // No passkey enrolled — sign out and redirect
+      // No passkey enrolled — sign out this device only (the default "global"
+      // scope would also end sessions on the user's other devices).
       void createClient()
-        .auth.signOut()
+        .auth.signOut({ scope: "local" })
         .then(() => router.push("/auth"))
     }
   }, [isAuthRoute, router])
@@ -84,7 +85,7 @@ export default function SessionGuard({ children }: Props) {
 
   function handleBiometricFallback() {
     void createClient()
-      .auth.signOut()
+      .auth.signOut({ scope: "local" })
       .then(() => router.push("/auth"))
   }
 

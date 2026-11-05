@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { getStoredCredentialId, isPasskeySupported, registerPasskey } from "@/lib/passkey"
 
 type IntegrationRecord = {
   id: string
@@ -12,9 +13,13 @@ type IntegrationRecord = {
 }
 
 type AiKeyState = "unknown" | "configured" | "missing"
+type PasskeyState = "unknown" | "unsupported" | "none" | "enrolled"
 
 export default function SettingsScreen() {
   const router = useRouter()
+  const [passkeyState, setPasskeyState] = useState<PasskeyState>("unknown")
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+  const [passkeyError, setPasskeyError] = useState<string | null>(null)
   const [aiKeyState, setAiKeyState] = useState<AiKeyState>("unknown")
   const [aiKeyInput, setAiKeyInput] = useState("")
   const [aiKeySaving, setAiKeySaving] = useState(false)
@@ -59,6 +64,28 @@ export default function SettingsScreen() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadProfile() }, [loadProfile])
+
+  // Passkey support/enrolment is browser-local, so read it after mount.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setPasskeyState(
+        !isPasskeySupported() ? "unsupported" : getStoredCredentialId() ? "enrolled" : "none",
+      )
+    }, 0)
+    return () => clearTimeout(id)
+  }, [])
+
+  async function handleSetupPasskey() {
+    setPasskeyBusy(true)
+    setPasskeyError(null)
+    const result = await registerPasskey()
+    setPasskeyBusy(false)
+    if (!result.ok) {
+      setPasskeyError(result.error)
+      return
+    }
+    setPasskeyState("enrolled")
+  }
 
   async function handleSaveAiKey(e: React.FormEvent) {
     e.preventDefault()
@@ -192,6 +219,45 @@ export default function SettingsScreen() {
               )}
             </div>
           </form>
+        </div>
+
+        {/* Biometric sign-in */}
+        <div className="px-6 py-4 border-b border-border">
+          <div className="flex justify-between items-baseline gap-3 mb-2">
+            <span className="text-md font-semibold text-fg">Biometric sign-in</span>
+            {passkeyState === "enrolled" && (
+              <span className="text-xs text-accent">Enabled on this device</span>
+            )}
+          </div>
+          {passkeyState === "unsupported" && (
+            <p className="text-xs text-subtle">
+              This browser doesn&apos;t support passkeys. Open the app in your phone&apos;s main
+              browser (or the installed app) over HTTPS to set one up.
+            </p>
+          )}
+          {(passkeyState === "none" || passkeyState === "enrolled") && (
+            <>
+              <p className="text-xs text-subtle mb-3 leading-[1.5]">
+                Sign in with your fingerprint or face instead of an email. Passkeys are stored per
+                browser, so set one up in the browser or installed app you actually use.
+              </p>
+              {passkeyError && (
+                <p className="text-xs text-red-400 mb-2">{passkeyError}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleSetupPasskey()}
+                disabled={passkeyBusy}
+                className="w-full bg-fg text-bg rounded-xl py-2.5 text-xs font-semibold hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {passkeyBusy
+                  ? "Setting up…"
+                  : passkeyState === "enrolled"
+                    ? "Set up again"
+                    : "Set up biometrics"}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Advanced: integrations */}

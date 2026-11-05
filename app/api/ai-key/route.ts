@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import Anthropic from "@anthropic-ai/sdk"
 import { getAuthenticatedContext } from "@/lib/api/session"
 import { encrypt } from "@/lib/encryption"
 
@@ -6,17 +7,28 @@ import { encrypt } from "@/lib/encryption"
  * POST /api/ai-key
  * Body: { key: string }
  *
- * Validates the key format, then stores it encrypted against the user's
- * profile. Live API validation is intentionally skipped — it can fail for
- * network reasons unrelated to key validity and blocks onboarding. A bad
- * key will surface as an error on the first AI call instead.
+ * Verifies the key with a lightweight Anthropic call and stores it encrypted
+ * against the user's profile. There is deliberately no format check, since
+ * Anthropic's key prefixes change. The key is rejected only
+ * when Anthropic explicitly answers 401 (authentication failed). Timeouts,
+ * network errors, rate limits, 5xx and permission (403) responses do not say
+ * anything about the key itself, so they must not block onboarding — the key
+ * is saved and any real problem surfaces on the first AI call.
  *
  * DELETE /api/ai-key
  * Removes the stored key for the authenticated user.
  */
 
-/** Anthropic keys follow the pattern sk-ant-api03-<base64url chars> */
-const ANTHROPIC_KEY_RE = /^sk-ant-api\d{2}-[\w-]{80,}$/
+/** True only if Anthropic definitively rejected the key (HTTP 401). */
+async function isKeyRejected(key: string): Promise<boolean> {
+  try {
+    const client = new Anthropic({ apiKey: key, maxRetries: 0 })
+    await client.models.list(undefined, { signal: AbortSignal.timeout(8_000) })
+    return false
+  } catch (err) {
+    return err instanceof Anthropic.APIError && err.status === 401
+  }
+}
 
 export async function POST(request: NextRequest) {
   const auth = await getAuthenticatedContext()
@@ -34,9 +46,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "API key is required" }, { status: 400 })
   }
 
-  if (!ANTHROPIC_KEY_RE.test(key)) {
+  if (await isKeyRejected(key)) {
     return NextResponse.json(
-      { error: "That doesn't look like an Anthropic API key. It should start with sk-ant-api03-." },
+      { error: "Anthropic rejected this API key. Check it and try again." },
       { status: 422 },
     )
   }

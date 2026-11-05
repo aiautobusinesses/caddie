@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { createClient as createServiceClientRaw } from "@/lib/supabase/server-service"
+import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/env"
 import type { Database } from "@/lib/database.types"
 
 function createServiceClient() {
@@ -164,29 +166,44 @@ export async function POST(request: Request) {
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", cred.id)
 
-  // Issue a new Supabase session for the verified user via the admin API.
-  // `createSession` is available in @supabase/supabase-js >= 2.x.
-  const adminClient = createServiceClient()
-  const { data: newSession, error: newSessErr } = await (
-    adminClient.auth.admin as unknown as {
-      createSession: (opts: { user_id: string }) => Promise<{
-        data: { session: { access_token: string; refresh_token: string } | null }
-        error: Error | null
-      }>
-    }
-  ).createSession({ user_id: cred.user_id })
+  // Issue a new Supabase session for the verified user. Supabase has no admin
+  // "create session" call, so mint a one-time magic-link token for the user and
+  // redeem it immediately with a stateless client to obtain the token pair.
+  const { data: userData, error: userErr } = await service.auth.admin.getUserById(
+    cred.user_id,
+  )
+  const email = userData?.user?.email
+  if (userErr || !email) {
+    console.error("[passkey authenticate] user lookup error", userErr)
+    return NextResponse.json({ error: "Failed to create session" }, { status: 500 })
+  }
 
-  if (newSessErr || !newSession?.session) {
-    console.error("[passkey authenticate] createSession error", newSessErr)
-    return NextResponse.json(
-      { error: "Failed to create session" },
-      { status: 500 },
-    )
+  const { data: linkData, error: linkErr } = await service.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  })
+  const tokenHash = linkData?.properties?.hashed_token
+  if (linkErr || !tokenHash) {
+    console.error("[passkey authenticate] generateLink error", linkErr)
+    return NextResponse.json({ error: "Failed to create session" }, { status: 500 })
+  }
+
+  const redeemer = createSupabaseClient(getSupabaseUrl(), getSupabasePublishableKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data: verified, error: verifyErr } = await redeemer.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: "magiclink",
+  })
+
+  if (verifyErr || !verified.session) {
+    console.error("[passkey authenticate] verifyOtp error", verifyErr)
+    return NextResponse.json({ error: "Failed to create session" }, { status: 500 })
   }
 
   return NextResponse.json({
-    accessToken: newSession.session.access_token,
-    refreshToken: newSession.session.refresh_token,
+    accessToken: verified.session.access_token,
+    refreshToken: verified.session.refresh_token,
   })
 }
 
