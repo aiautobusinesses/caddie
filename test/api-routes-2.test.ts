@@ -1047,6 +1047,24 @@ describe("POST /api/ai-key", async () => {
     expect(res.status).toBe(200)
   })
 
+  it("returns 500 with a config hint when encryption is not configured", async () => {
+    const saved = process.env.ENCRYPTION_KEY
+    delete process.env.ENCRYPTION_KEY
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      vi.mocked(getAuthenticatedContext).mockResolvedValue(fakeAuth())
+      const modelsList = await getAnthropicModelsList()
+      modelsList.mockResolvedValue({})
+      const res = await POST(jsonReq("http://localhost", { key: "sk-ant-api03-" + "a".repeat(80) }))
+      expect(res.status).toBe(500)
+      const data = await res.json()
+      expect(data.error).toMatch(/ENCRYPTION_KEY/)
+    } finally {
+      process.env.ENCRYPTION_KEY = saved
+      errSpy.mockRestore()
+    }
+  })
+
   it("returns 500 when profile update fails", async () => {
     const eqFn = vi.fn(async () => ({ error: { message: "db error" } }))
     const updateFn = vi.fn(() => ({ eq: eqFn }))

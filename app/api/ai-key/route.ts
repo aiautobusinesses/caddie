@@ -53,12 +53,24 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  let encrypted: string
+  try {
+    encrypted = encrypt(key)
+  } catch (err) {
+    console.error("[ai-key] encryption failed:", err)
+    return NextResponse.json(
+      { error: "Server encryption is not configured correctly (check ENCRYPTION_KEY)." },
+      { status: 500 },
+    )
+  }
+
   const { error } = await auth.supabase
     .from("profiles")
-    .update({ anthropic_api_key: encrypt(key) })
+    .update({ anthropic_api_key: encrypted })
     .eq("id", auth.user.id)
 
   if (error) {
+    console.error("[ai-key] profile update failed:", error)
     return NextResponse.json({ error: "Failed to save API key." }, { status: 500 })
   }
 
